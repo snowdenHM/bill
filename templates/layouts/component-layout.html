@@ -1,0 +1,35 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+    {% block title %}
+    {% endblock %}
+    {% block css1 %}
+    {% endblock %}
+
+    {% include './head-css.html' %}
+
+    {% block css2 %}
+    {% endblock %}
+</head>
+
+<body data-pc-preset="preset-1" data-pc-sidebar-caption="true" data-pc-layout="vertical" data-pc-direction="ltr"
+      data-pc-theme_contrast="" data-pc-theme="light" class="component-page">
+
+{% include 'layouts/loader.html' %}
+{% include 'layouts/component/component-header.html' %}
+{% block mainContent %}
+{% endblock %}
+<!-- Add your main content here -->
+
+{% block js1 %}
+{% endblock %}
+{% include './footer-js.html' %}
+{% include 'layouts/component/layout-component-footer-js.html' %}
+{% block js2 %}
+{% endblock %}
+{% comment %} {% include './footer-block.html' %} {% endcomment %}
+{% include './customizer.html' %}
+<body>
+
+</html>

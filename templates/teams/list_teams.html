@@ -1,0 +1,194 @@
+{#{% extends "web/app/app_base.html" %}#}
+{#{% load i18n %}#}
+{#{% load static %}#}
+{#{% load team_tags %}#}
+{#{% block app %}#}
+{#<div class="app-card">#}
+{#  {% if teams %}#}
+{#    <h3 class="pg-subtitle">{% translate "My Teams" %}</h3>#}
+{#    <div class="table-responsive">#}
+{#      <table class="table pg-table">#}
+{#        <thead>#}
+{#        <tr>#}
+{#          <th>{% translate "Name" %}</th>#}
+{#        </tr>#}
+{#        </thead>#}
+{#        <tbody>#}
+{#        {% for team in teams %}#}
+{#          <tr>#}
+{#            <td>{{ team.name }}</td>#}
+{#            <td><a class="link" href="{% url 'web_team:home' team.slug %}">{% translate "View Dashboard" %}</a></td>#}
+{#            <td class="pg-inline-buttons pg-justify-content-end">#}
+{#              <a class="pg-button-secondary mx-1" href="{% url 'single_team:manage_team' team.slug %}">#}
+{#                <span class="pg-icon">#}
+{#                  <i class="fa fa-gear"></i>#}
+{#                </span>#}
+{#                <span class="pg-hidden-mobile-inline">{% if  request.user|is_admin_of:team %}{% translate "Edit" %}{% else %}{% translate "View Details" %}{% endif %}</span>#}
+{#              </a>#}
+{#            </td>#}
+{#          </tr>#}
+{#        {% endfor %}#}
+{#        </tbody>#}
+{#      </table>#}
+{#    </div>#}
+{#    <div class="mt-2">#}
+{#      <a class="pg-button-secondary" href="{% url 'teams:create_team' %}">#}
+{#        <span class="pg-icon"><i class="fa fa-plus"></i></span>#}
+{#        <span>{% translate "Add Team" %}</span>#}
+{#      </a>#}
+{#    </div>#}
+{#  {% else %}#}
+
+{% extends "layouts/main-layout.html" %}
+{% load static %}
+{% block title %}
+    {% include 'layouts/head-page-meta.html' with title='User Management' %}
+{% endblock %}
+
+{% block css1 %}
+    <!-- Add your CSS block content here if any -->
+    <link rel="stylesheet" href={% static "libs/simple-datatables/dist/style.css" %}/>
+    <link rel="stylesheet" href={% static "libs/notifier-js/dist/css/notifier.css" %}/>
+{% endblock %}
+
+{% block css2 %}
+    <!-- Add your second CSS block content here if any -->
+{% endblock %}
+
+{% block mainContent %}
+    <!-- [ Main Content ] start -->
+    {% if teams %}
+        <div class="row">
+            <!-- [ basic-table ] start -->
+            <div class="col-xl-12">
+                <div class="card table-card">
+                    <div class="card-header">
+                        <div class="d-sm-flex align-items-center justify-content-between">
+                            <h5 class="mb-3 mb-sm-0">Workspace list</h5>
+                            <div>
+                                <a href="{% url 'teams:create_team' %}" class="btn btn-primary">
+                                    Add Workspace
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body table-border-style">
+                        <div class="table-responsive">
+                            <table class="table" id="pc-dt-simple">
+                                <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th data-type="date" data-format="YYYY/DD/MM">Created At</th>
+                                    <th>Action</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                {% for user in user_list %}
+                                    <tr>
+                                        <td>{{ user.first_name }} {{ user.last_name }}</td>
+                                        <td>{{ user.email }}</td>
+                                        <td>{{ user.created_at }}</td>
+                                        <td>
+                                            <a href="#"
+                                               class="avtar avtar-xs btn-link-primary">
+                                                <i class="ti ti-pencil f-20"></i>
+                                            </a>
+                                            <a href="#"
+                                               class="avtar avtar-xs btn-link-danger sweet-success-cancel">
+                                                <i class="ti ti-trash f-20"></i>
+                                            </a>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- [ basic-table ] end -->
+        </div>
+    {% else %}
+        <div class="card">
+            <div class="card-body text-center">
+                <h4>No Workspace Yet!</h4>
+                <h5>Create your first team below to get started.</h5>
+                <a href="{% url 'teams:create_team' %}">
+                    <button class="btn btn-success">
+                        <i data-feather="plus-circle"></i> Create Workspace
+                    </button>
+                </a>
+            </div>
+        </div>
+    {% endif %}
+    <!-- [ Main Content ] end -->
+{% endblock %}
+
+{% block js1 %}
+    <!-- [Page Specific JS] start -->
+    <script type="module">
+        import {DataTable} from '/static/libs/simple-datatables/dist/module.js';
+
+        window.dt = new DataTable('#pc-dt-simple');
+    </script>
+    <script src={% static "libs/notifier-js/dist/js/notifier.js" %}></script>
+    <script src={% static "libs/sweetalert2/dist/sweetalert2.all.min.js" %}></script>
+    <script>
+        // Check if there are any messages to display
+        {% if messages %}
+            {% for message in messages %}
+                // Determine the notification type based on the message tags
+                let type = '';
+                let icon = '';
+                if ("{{ message.tags }}" === "success") {
+                    type = 'success';
+                    icon = '/static/assets/images/notification/ok-48.png';
+                } else if ("{{ message.tags }}" === "info") {
+                    type = 'info';
+                    icon = '/static/assets/images/notification/survey-48.png';
+                } else if ("{{ message.tags }}" === "warning") {
+                    type = 'warning';
+                    icon = '/static/assets/images/notification/medium_priority-48.png';
+                } else if ("{{ message.tags }}" === "danger") {
+                    type = 'danger';
+                    icon = '/static/assets/images/notification/high_priority-48.png';
+                }
+                // Display the notification using notifier.js
+                notifier.show(
+                    'Notification', // Title
+                    "{{ message }}", // Message content
+                    type, // Notification type (success, info, warning, danger)
+                    icon, // Icon URL
+                    4000 // Auto-close timeout in milliseconds
+                );
+            {% endfor %}
+        {% endif %}
+    </script>
+    <script>
+        // SweetAlert2 confirmation logic for delete action
+        document.addEventListener('DOMContentLoaded', function () {
+            const elements = document.querySelectorAll('.sweet-success-cancel');
+            elements.forEach(element => {
+                element.addEventListener('click', function (event) {
+                    event.preventDefault();
+                    const url = this.getAttribute('href');
+                    Swal.fire({
+                        title: 'Are you sure?',
+                        text: "You won't be able to revert this!",
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonText: 'Yes, delete it !!',
+                        confirmButtonColor: "#DD6B55"
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            window.location.href = url;
+                        }
+                    });
+                });
+            });
+        });
+    </script>
+    <!-- [Page Specific JS] end -->
+
+{% endblock %}

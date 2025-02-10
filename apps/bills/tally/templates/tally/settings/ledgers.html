@@ -1,0 +1,52 @@
+{% extends "layouts/main-layout.html" %}
+{% load static %}
+{% load team_tags %}
+{% block title %}
+    {% include 'layouts/head-page-meta.html' with title=heading %}
+{% endblock %}
+
+{% block css1 %}
+{% endblock %}
+
+{% block css2 %}
+    <!-- Add your second CSS block content here if any -->
+{% endblock %}
+
+{% block mainContent %}
+    <!-- [ Main Content ] start -->
+    <div class="row">
+        <div class="col-sm-12">
+            <div class="card table-card">
+                <div class="card-header">
+                    <div class="d-sm-flex align-items-center justify-content-between">
+                        <h5 class="mb-3 mb-sm-0">Taxes</h5>
+                        <div>
+                            <a href="{% url 'zoho:fetchTax' team.slug %}" class="btn btn-primary">
+                                Sync Taxes
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+    <!-- [ Main Content ] end -->
+{% endblock %}
+
+{% block js1 %}
+
+{% endblock %}
+
+
+
+
+
+
+
+
+
+
+
+
+

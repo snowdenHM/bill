@@ -1,0 +1,165 @@
+{% extends "layouts/main-layout.html" %}
+{% load static %}
+{% load team_tags %}
+{% block title %}
+    {% include 'layouts/head-page-meta.html' with title=heading %}
+{% endblock %}
+
+{% block css1 %}
+    <!-- Add your CSS block content here if any -->
+    <link rel="stylesheet" href={% static "libs/simple-datatables/dist/style.css" %}/>
+    <link rel="stylesheet" href={% static "libs/notifier-js/dist/css/notifier.css" %}/>
+{% endblock %}
+
+{% block css2 %}
+    <!-- Add your second CSS block content here if any -->
+{% endblock %}
+
+{% block mainContent %}
+    <!-- Common status Component -->
+    {% include 'tally/vendor/components/filter.html' %}
+    <!-- [ Main Content ] start -->
+    <div class="row">
+        <div class="col-sm-12">
+            <div class="card table-card">
+                <div class="card-header">
+                    <div class="d-sm-flex align-items-center justify-content-between">
+                        <h5 class="mb-3 mb-sm-0">Vendor Bills</h5>
+                        <div>
+                            <a href="{% url 'tally:vendor_bill_create' team.slug %}" class="btn btn-primary">
+                                Upload
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body table-border-style">
+                    <div class="table-responsive">
+                        <table class="table" id="pc-dt-simple">
+                            <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Status</th>
+                                <th>Created At</th>
+                                <th>Action</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            {% for bill in bills %}
+                                <tr>
+                                    <td>{{ bill.billmunshiName }}</td>
+                                    <td>
+                                        <span class="badge
+                                            {% if bill.status == 'Draft' %}text-bg-warning
+                                            {% elif bill.status == 'Analyzed' %}text-bg-primary
+                                            {% elif bill.status == 'Verified' %}text-bg-success
+                                            {% elif bill.status == 'Synced' %}text-bg-info
+                                            {% else %}text-bg-secondary
+                                            {% endif %}">
+                                            {{ bill.status }}
+                                        </span>
+                                    </td>
+
+                                    <td>{{ bill.created_at }}</td>
+                                    <td>
+                                        {% include 'tally/vendor/components/table_actions.html' %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- [ Main Content ] end -->
+{% endblock %}
+
+{% block js1 %}
+    <script type="module">
+        import {DataTable} from '/static/libs/simple-datatables/dist/module.js';
+
+        window.dt = new DataTable('#pc-dt-simple');
+    </script>
+    <script src={% static "libs/notifier-js/dist/js/notifier.js" %}></script>
+    <script>
+        // Check if there are any messages to display
+        {% if messages %}
+            {% for message in messages %}
+                // Determine the notification type based on the message tags
+                let type = '';
+                let icon = '';
+                if ("{{ message.tags }}" === "success") {
+                    type = 'success';
+                    icon = '/static/assets/images/notification/ok-48.png';
+                } else if ("{{ message.tags }}" === "info") {
+                    type = 'info';
+                    icon = '/static/assets/images/notification/survey-48.png';
+                } else if ("{{ message.tags }}" === "warning") {
+                    type = 'warning';
+                    icon = '/static/assets/images/notification/medium_priority-48.png';
+                } else if ("{{ message.tags }}" === "danger") {
+                    type = 'danger';
+                    icon = '/static/assets/images/notification/high_priority-48.png';
+                }
+                // Display the notification using notifier.js
+                notifier.show(
+                    'Notification', // Title
+                    "{{ message }}", // Message content
+                    type, // Notification type (success, info, warning, danger)
+                    icon, // Icon URL
+                    4000 // Auto-close timeout in milliseconds
+                );
+            {% endfor %}
+        {% endif %}
+    </script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const billModal = document.getElementById("billModal");
+
+            billModal.addEventListener("show.bs.modal", function (event) {
+                const button = event.relatedTarget;
+                const billContent = document.getElementById("billContent");
+
+                // Get the pre-generated Django URL from data-url attribute
+                const url = button.getAttribute("data-url");
+
+                // Show loading text while fetching data
+                billContent.innerHTML = "<p class='text-center'>Loading...</p>";
+
+                // Fetch bill details via AJAX
+                fetch(url)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.image_url) {
+                            billContent.innerHTML = `
+                            <div class="text-center">
+                                <img src="${data.image_url}" alt="Bill Image" class="img-fluid" style="max-height: 400px;">
+                                <p class="mt-2">
+                                    <a href="${data.image_url}" class="btn btn-secondary" target="_blank">Download Bill</a>
+                                </p>
+                            </div>
+                        `;
+                        } else {
+                            billContent.innerHTML = "<p class='text-center text-danger'>No bill image found.</p>";
+                        }
+                    })
+                    .catch(error => {
+                        billContent.innerHTML = "<p class='text-center text-danger'>Error loading bill details.</p>";
+                        console.error("Error fetching bill data:", error);
+                    });
+            });
+        });
+    </script>
+
+
+
+{% endblock %}
+
+
+
+
+
+
+
+

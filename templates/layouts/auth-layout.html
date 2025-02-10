@@ -1,0 +1,32 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+    {% block title %}
+    {% endblock %}
+    {% block css1 %}
+    {% endblock %}
+
+    {% include './head-css.html' %}
+
+    {% block css2 %}
+    {% endblock %}
+</head>
+
+<body data-pc-preset="preset-1" data-pc-sidebar-caption="true" data-pc-layout="vertical" data-pc-direction="ltr"
+      data-pc-theme_contrast="" data-pc-theme="light" class="landing-page">
+
+{% include 'layouts/loader.html' %}
+{% block mainContent %}
+{% endblock %}
+<!-- Add your main content here -->
+{% include './customizer.html' %}
+
+{% block js1 %}
+{% endblock %}
+{% include './footer-js.html' %}
+{% block js2 %}
+{% endblock %}
+<body>
+
+</html>

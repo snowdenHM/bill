@@ -1,0 +1,114 @@
+{% load static %}
+{% load feature_flags %}
+{% load waffle_tags %}
+{% load team_tags %}
+
+<!-- Dashboard -->
+<li class="pc-item pc-hasmenu  {% if active_tab == 'team' %} pc-trigger active {% endif %}">
+    <a href="javascript:void(0);" class="pc-link ">
+            <span class="pc-micon">
+              <i class="material-icons-two-tone">dashboard</i>
+            </span>
+        <span class="pc-mtext">Dashboard</span>
+        <span class="pc-arrow"><i data-feather="chevron-right"></i></span>
+    </a>
+    <ul class="pc-submenu">
+        <li class="pc-item {% if active_tab == 'team' %} active {% endif %}">
+            <a class="pc-link" href="{% url 'web:home' %}">Main</a>
+        </li>
+        <li class="pc-item"><a class="pc-link" href="{% url 'teams:teams_home' %}">Workspace</a></li>
+    </ul>
+</li>
+
+
+<!-- Zoho Bills Section -->
+{% is_flag_active 'Zoho' team.slug as zoho_enabled %}
+{% if zoho_enabled %}
+    <li class="pc-item pc-hasmenu">
+        <a href="javascript:void(0);" class="pc-link">
+            <span class="pc-micon">
+              <i class="material-icons-two-tone">find_in_page</i>
+            </span>
+            <span class="pc-mtext">Zoho Bills</span>
+            <span class="pc-arrow"><i data-feather="chevron-right"></i></span>
+        </a>
+        <ul class="pc-submenu">
+            <li class="pc-item"><a class="pc-link" href="{% url 'zoho:vendor_bill_list' team.slug %}">Vendor Bills</a>
+            </li>
+            <li class="pc-item"><a class="pc-link" href="{% url 'zoho:expense_bill_list' team.slug %}">Expense
+                Journal</a>
+            </li>
+            <li class="pc-item pc-hasmenu">
+                <a href="javascript:void(0);" class="pc-link">
+                    Settings
+                    <span class="pc-arrow">
+                    <i data-feather="chevron-right"></i>
+                </span>
+                </a>
+                <ul class="pc-submenu">
+                    <li class="pc-item"><a class="pc-link" href="{% url 'zoho:credentials' team.slug %}">Credentials</a>
+                    </li>
+                    <li class="pc-item"><a class="pc-link" href="{% url 'zoho:vendors' team.slug %}">Vendor</a></li>
+                    <li class="pc-item"><a class="pc-link" href="{% url 'zoho:chartOfAccount' team.slug %}">COA</a></li>
+                    <li class="pc-item"><a class="pc-link" href="{% url 'zoho:tds_tcs_tax' team.slug %}">TDS/TCS</a>
+                    </li>
+                    <li class="pc-item"><a class="pc-link" href="{% url 'zoho:taxes' team.slug %}">Taxes</a></li>
+                </ul>
+            </li>
+        </ul>
+    </li>
+{% endif %}
+<!-- Tally Bills Section -->
+{% is_flag_active 'Tally' team.slug as tally_enabled %}
+{% if tally_enabled %}
+    <li class="pc-item pc-hasmenu">
+        <a href="javascript:void(0);" class="pc-link">
+            <span class="pc-micon">
+              <i class="material-icons-two-tone">find_in_page</i>
+            </span>
+            <span class="pc-mtext">Tally Bills</span>
+            <span class="pc-arrow"><i data-feather="chevron-right"></i></span>
+        </a>
+        <ul class="pc-submenu">
+            <li class="pc-item"><a class="pc-link" href="{% url 'tally:vendor_bill_list' team.slug %}">Vendor Bills</a>
+            </li>
+            <li class="pc-item"><a class="pc-link" href="{% url 'zoho:expense_bill_list' team.slug %}">Expense
+                Journal</a>
+            </li>
+            <li class="pc-item pc-hasmenu">
+                <a href="javascript:void(0);" class="pc-link">
+                    Settings
+                    <span class="pc-arrow">
+                    <i data-feather="chevron-right"></i>
+                </span>
+                </a>
+                <ul class="pc-submenu">
+                    <li class="pc-item"><a class="pc-link" href="{% url 'tally:tally_ledgers' team.slug %}">Ledgers</a>
+                    </li>
+                </ul>
+            </li>
+        </ul>
+    </li>
+{% endif %}
+
+
+<!-- Settings
+<li class="pc-item pc-caption">
+    <label>Settings</label>
+    <svg class="pc-icon">
+        <use xlink:href="#custom-setting-2"></use>
+    </svg>
+</li> -->
+<!-- User Management
+<li class="pc-item pc-hasmenu">
+    <a href="javascript:void(0);" class="pc-link">
+    <span class="pc-micon">
+      <i class="material-icons-two-tone">supervised_user_circle</i>
+    </span>
+        <span class="pc-mtext">User Management</span>
+        <span class="pc-arrow"><i data-feather="chevron-right"></i></span>
+    </a>
+    <ul class="pc-submenu">
+        <li class="pc-item"><a class="pc-link" href="/user">User</a></li>
+    </ul>
+</li> -->

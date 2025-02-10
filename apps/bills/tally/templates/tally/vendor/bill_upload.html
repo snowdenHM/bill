@@ -1,0 +1,73 @@
+{% extends "layouts/main-layout.html" %}
+{% load static %}
+{% load team_tags %}
+{% load widget_tweaks %}
+{% block title %}
+    {% include 'layouts/head-page-meta.html' with title=heading %}
+{% endblock %}
+
+{% block css1 %}
+    <!-- Add your CSS block content here if any -->
+{% endblock %}
+
+{% block css2 %}
+    <!-- Add your second CSS block content here if any -->
+{% endblock %}
+
+{% block mainContent %}
+    <!-- [ Main Content ] start -->
+    <div class="row">
+        <div class="col-sm-12">
+            <div class="card">
+                <div class="card-header">
+                    <div class="d-sm-flex align-items-center justify-content-between">
+                        <h5 class="mb-3 mb-sm-0">Bill Upload</h5>
+                        <div>
+                            <a href="{% url 'tally:vendor_bill_list' team.slug %}" class="btn btn-primary">
+                               Back
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <form method="post" action="{% url 'tally:vendor_bill_create' team.slug %}"
+                          enctype="multipart/form-data">
+                        {% csrf_token %}
+                        <div class="row m-2">
+                            <div class="col">
+                                <label class="label">File Type</label>
+                                {% render_field form.fileType class="form-select" %}
+                                <p class="text-muted">Allowed Files: &nbsp; <b> JPG, PNG & WEBP </b> for One
+                                    Document
+                                    per File & <b>PDF</b> for One Document per
+                                    Page</p>
+                            </div>
+                        </div>
+                        <div class="row m-2">
+                            <div class="col">
+                                <label class="label">File Upload</label>
+                                {% render_field form.file class="form-control" %}
+                            </div>
+                        </div>
+                        <div class="row m-4">
+                            <button type="submit" class="btn btn-success ">Submit</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- [ Main Content ] end -->
+{% endblock %}
+
+{% block js1 %}
+
+{% endblock %}
+
+
+
+
+
+
+
+

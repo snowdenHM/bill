@@ -1,0 +1,33 @@
+{% extends "layouts/main-layout.html" %}
+{% load static %}
+{% load team_tags %}
+{% block title %}
+    {% include 'layouts/head-page-meta.html' with title=heading %}
+{% endblock %}
+
+{% block css1 %}
+    <!-- Add your CSS block content here if any -->
+{% endblock %}
+
+{% block css2 %}
+    <!-- Add your second CSS block content here if any -->
+{% endblock %}
+
+{% block mainContent %}
+    <!-- [ Main Content ] start -->
+    <div class="row">
+        <div class="col-sm-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Team Dashboard</h5>
+                </div>
+                <div class="card-body"></div>
+            </div>
+        </div>
+    </div>
+    <!-- [ Main Content ] end -->
+{% endblock %}
+
+{% block js1 %}
+{% endblock %}    
+      

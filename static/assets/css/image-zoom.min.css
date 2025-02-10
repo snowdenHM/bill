@@ -1,0 +1,92 @@
+.ndd-uberzoom-container {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    overflow: hidden
+}
+
+.ndd-uberzoom-container img.ndd-uberzoom-main-image {
+    opacity: 0;
+    width: 100%;
+    height: auto;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -khtml-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none
+}
+
+.ndd-uberzoom-container:hover .ndd-uberzoom-interface {
+    opacity: 1
+}
+
+.ndd-uberzoom-interface {
+    opacity: 0;
+    transition: opacity .75s;
+    -moz-transition: opacity .75s;
+    -webkit-transition: opacity .75s
+}
+
+.ndd-uberzoom-fullscreen, .ndd-uberzoom-navigator {
+    position: absolute;
+    background: rgba(0, 0, 0, .75);
+    border: 1px solid rgba(255, 255, 255, .25);
+    border-radius: 3px;
+    cursor: pointer;
+    overflow: hidden;
+    box-sizing: content-box;
+    -moz-box-sizing: content-box;
+    -webkit-box-sizing: content-box
+}
+
+.ndd-uberzoom-fullscreen img {
+    width: 28px;
+    height: 28px;
+    margin: 8px;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -khtml-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none
+}
+
+.ndd-uberzoom-navigator-image {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+    z-index: 0
+}
+
+.ndd-uberzoom-navigator-window {
+    position: absolute;
+    background: rgba(255, 255, 255, .5);
+    border-radius: 2px;
+    box-sizing: border-box;
+    -moz-box-sizing: border-box;
+    -webkit-box-sizing: border-box;
+    z-index: 1
+}
+
+.ndd-uberzoom-fullscreen {
+    width: 44px;
+    height: 44px
+}
+
+.ndd-uberzoom-fullscreen:active {
+    background: rgba(255, 255, 255, .25)
+}
+
+.ndd-uberzoom-container-fullscreen {
+    position: fixed;
+    z-index: 90000;
+    width: 100%;
+    height: 100%;
+    left: 0;
+    top: 0;
+    background: #000
+}

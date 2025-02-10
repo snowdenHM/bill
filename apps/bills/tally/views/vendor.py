@@ -1,0 +1,414 @@
+import os
+import json
+import base64
+import datetime
+import logging
+import requests
+from io import BytesIO
+from datetime import datetime
+from PyPDF2 import PdfReader
+from pdf2image import convert_from_bytes
+from django.conf import settings
+from django.contrib import messages
+from django.core.files.base import ContentFile
+from django.db.models.functions import Lower
+from django.db.models import Q
+from django.shortcuts import render, redirect, get_object_or_404
+from django.http import JsonResponse
+
+# OpenAI Import
+from openai import OpenAI
+
+from apps.teams.decorators import login_and_team_required
+from apps.bills.tally.forms import (
+    TallyVendorBillForm, TallyVendorAnalyzedBillForm, TallyVendorAnalyzedProductForm, TallyVendorProductFormSet
+)
+from apps.bills.tally.models import (ParentLedger, Ledger, TallyVendorBill, TallyVendorAnalyzedBill,
+                                     TallyVendorAnalyzedProduct)
+
+client = OpenAI(api_key=settings.OPENAI_API_KEY)
+logger = logging.getLogger(__name__)
+
+
+# ✅
+@login_and_team_required(login_url='account_login')
+def vendor_bills(request, team_slug):
+    """
+    Retrieves all vendor bills for the current team and displays them in the vendor main page.
+    """
+    bills = TallyVendorBill.objects.filter(team=request.team).order_by('-created_at')
+    context = {'bills': bills, 'heading': 'Vendor Bills List'}
+    return render(request, 'tally/vendor/main.html', context)
+
+
+# ✅
+@login_and_team_required(login_url='account_login')
+def bill_create(request, team_slug):
+    """
+    Handles vendor bill creation, including splitting PDFs for multiple invoices.
+    """
+    if request.method == 'POST':
+        form = TallyVendorBillForm(request.POST, request.FILES)
+        if form.is_valid():
+            bill = form.save(commit=False)
+            bill.team = request.team
+
+            # Restrict PDF uploads for 'Single Invoice/File'
+            if bill.fileType == 'Single Invoice/File' and bill.file.name.endswith('.pdf'):
+                messages.error(request, 'PDF upload is not allowed for Single Invoice/File.')
+                return redirect('tally:vendor_bill_list', team_slug=team_slug)
+
+            # Handle PDF splitting for 'Multiple Invoice/File'
+            if bill.fileType == 'Multiple Invoice/File' and bill.file.name.endswith('.pdf'):
+                try:
+                    bill.file.seek(0)  # Ensure file is at the beginning
+                    pdf_bytes = bill.file.read()  # Read the PDF once
+                    pdf = PdfReader(BytesIO(pdf_bytes))
+                    unique_id = datetime.now().strftime("%Y%m%d%H%M%S")
+                    for page_num in range(len(pdf.pages)):
+                        # Convert each PDF page to an image
+                        page_images = convert_from_bytes(pdf_bytes, first_page=page_num + 1, last_page=page_num + 1)
+
+                        if page_images:
+                            image_io = BytesIO()
+                            page_images[0].save(image_io, format='JPEG')
+                            image_io.seek(0)
+
+                            # Create separate VendorBill for each page
+                            TallyVendorBill.objects.create(
+                                billmunshiName=f"BM-Page-{page_num + 1}-{unique_id}",
+                                file=ContentFile(image_io.read(), name=f"BM-Page-{page_num + 1}-{unique_id}.jpg"),
+                                fileType=bill.fileType,
+                                status=bill.status,
+                                team=request.team
+                            )
+
+                    messages.success(request, 'Bill uploaded and split successfully!')
+                    return redirect('tally:vendor_bill_list', team_slug=team_slug)
+
+                except Exception as e:
+                    messages.error(request, f'Error processing PDF: {str(e)}')
+                    return redirect('tally:vendor_bill_list', team_slug=team_slug)
+
+            # Save bill for non-PDF uploads
+            bill.save()
+            messages.success(request, 'Bill uploaded successfully!')
+            return redirect('tally:vendor_bill_list', team_slug=team_slug)
+    else:
+        form = TallyVendorBillForm()
+    return render(request, 'tally/vendor/bill_upload.html', {'form': form, 'heading': 'Create Vendor Bill'})
+
+
+# ✅
+@login_and_team_required(login_url='account_login')
+def bill_delete(request, team_slug, bill_id):
+    """
+    Deletes a vendor bill and removes its associated file from storage.
+    """
+    bill = get_object_or_404(TallyVendorBill, id=bill_id)
+
+    # Delete the file from storage if it exists
+    if bill.file:
+        file_path = os.path.join(settings.MEDIA_ROOT, str(bill.file))
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+    # Delete the bill record from the database
+    bill.delete()
+
+    messages.success(request, 'Bill and associated file deleted successfully!')
+    return redirect('tally:vendor_bill_list', team_slug=team_slug)
+
+
+# ✅
+@login_and_team_required(login_url='account_login')
+def bill_drafts(request, team_slug):
+    """
+    Retrieves all draft vendor bills for the current team.
+    """
+    draft_bills = TallyVendorBill.objects.filter(team=request.team, status="Draft")
+    context = {'draft_bills': draft_bills, 'heading': 'Draft Vendor Bills'}
+    return render(request, 'tally/vendor/draft.html', context)
+
+
+# ✅
+@login_and_team_required(login_url='account_login')
+def bill_analyzed(request, team_slug):
+    """
+    Retrieves all analyzed vendor bills.
+    """
+    analyzed_bills = TallyVendorBill.objects.filter(
+        Q(team=request.team) & (Q(status="Analyzed") | Q(status="Verified"))
+    )
+    context = {'analyzed_bills': analyzed_bills, 'heading': 'Analyzed Vendor Bills'}
+    return render(request, 'tally/vendor/analyzed.html', context)
+
+
+# ✅
+@login_and_team_required(login_url='account_login')
+def bill_synced(request, team_slug):
+    """
+    Retrieves all synced vendor bills.
+    """
+    synced_bills = TallyVendorBill.objects.filter(team=request.team, status="Synced")
+    context = {'synced_bills': synced_bills, 'heading': 'Synced Vendor Bills'}
+    return render(request, 'tally/vendor/synced.html', context)
+
+
+# ✅
+@login_and_team_required(login_url='account_login')
+def view_bill(request, team_slug, bill_id):
+    """
+    Returns the bill image URL as a JSON response.
+    """
+    bill = get_object_or_404(TallyVendorBill, id=bill_id)
+
+    if bill.file:
+        return JsonResponse({"image_url": bill.file.url})
+    else:
+        return JsonResponse({"error": "No bill image found"}, status=404)
+
+
+# ✅
+@login_and_team_required(login_url='account_login')
+def bill_analysis_process(request, team_slug, bill_id):
+    """
+    Analyzes and processes a vendor bill using AI.
+    """
+    bill = get_object_or_404(TallyVendorBill, id=bill_id)
+
+    # Read the file and convert to Base64
+    try:
+        with open(bill.file.path, 'rb') as f:
+            image_base64 = base64.b64encode(f.read()).decode('utf-8')
+    except Exception as error:
+        logger.error(f"Error reading bill file: {error}")
+        messages.warning(request, 'Error reading the bill file.')
+        return redirect('tally:vendor_bill_list', team_slug=team_slug)
+
+    # JSON Schema for AI extraction
+    invoice_schema = {
+        "$schema": "http://json-schema.org/draft/2020-12/schema",
+        "title": "Invoice",
+        "description": "A simple invoice format",
+        "type": "object",
+        "properties": {
+            "invoiceNumber": {"type": "string"},
+            "dateIssued": {"type": "string", "format": "date"},
+            "dueDate": {"type": "string", "format": "date"},
+            "from": {"type": "object", "properties": {"name": {"type": "string"}, "address": {"type": "string"}}},
+            "to": {"type": "object", "properties": {"name": {"type": "string"}, "address": {"type": "string"}}},
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "description": {"type": "string"},
+                        "quantity": {"type": "number"},
+                        "price": {"type": "number"}
+                    }
+                }
+            },
+            "total": {"type": "number"},
+            "igst": {"type": "number"},
+            "cgst": {"type": "number"},
+            "sgst": {"type": "number"}
+        }
+    }
+
+    # AI Processing Request
+    try:
+        response = client.chat.completions.create(
+            model='gpt-4o',
+            response_format={"type": "json_object"},
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "text",
+                     "text": f"Extract invoice data in JSON format using this schema: {json.dumps(invoice_schema)}"},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
+                ]
+            }],
+            max_tokens=1000
+        )
+        json_data = json.loads(response.choices[0].message.content)
+    except Exception as error:
+        logger.error(f"AI processing failed: {error}")
+        messages.warning(request, 'AI processing failed.')
+        return redirect('zoho:vendor_bill_list', team_slug=team_slug)
+
+    # Save extracted data to the bill object
+    try:
+        if "properties" in json_data:
+            relevant_data = {
+                "invoiceNumber": json_data["properties"]["invoiceNumber"]["const"],
+                "dateIssued": json_data["properties"]["dateIssued"]["const"],
+                "dueDate": json_data["properties"]["dueDate"]["const"],
+                "from": json_data["properties"]["from"]["properties"],
+                "to": json_data["properties"]["to"]["properties"],
+                "items": [{"description": item["description"]["const"], "quantity": item["quantity"]["const"],
+                           "price": item["price"]["const"]} for item in json_data["properties"]["items"]["items"]],
+                "total": json_data["properties"]["total"]["const"],
+                "igst": json_data["properties"]["igst"]["const"],
+                "cgst": json_data["properties"]["cgst"]["const"],
+                "sgst": json_data["properties"]["sgst"]["const"],
+            }
+        else:
+            relevant_data = json_data
+        bill.analysed_data = relevant_data
+        bill.save(update_fields=['analysed_data'])
+    except Exception as error:
+        logger.error(f"Error saving bill data: {error}")
+        messages.warning(request, 'Error saving Bill data.')
+        return redirect('tally:vendor_bill_list', team_slug=team_slug)
+
+    # Extract required fields safely
+    try:
+        invoice_number = relevant_data.get('invoiceNumber', '').strip()
+        date_issued = relevant_data.get('dateIssued', '')
+        company_name = relevant_data.get('from', {}).get('name', '').strip().lower()
+
+        date_issued = datetime.strptime(date_issued, '%Y-%m-%d').date() if date_issued else None
+
+        try:
+            parent_ledger = ParentLedger.objects.get(parent="Sundry Creditors")
+            vendor_list = Ledger.objects.filter(parent=parent_ledger, team=request.team)
+
+            # Find the matching vendor in vendor_list (Case-Insensitive Exact Match)
+            vendor = vendor_list.filter(name__iexact=company_name).first()
+            # If no exact match, try partial match
+            if not vendor:
+                vendor = vendor_list.filter(name__icontains=company_name).first()
+        except ParentLedger.DoesNotExist:
+            vendor = None
+
+        # Create VendorAnalyzedBill entry
+        analyzed_bill = TallyVendorAnalyzedBill.objects.create(
+            selectBill=bill,
+            vendor=vendor,
+            bill_no=invoice_number,
+            bill_date=date_issued,
+            igst=relevant_data.get('igst', 0),
+            cgst=relevant_data.get('cgst', 0),
+            sgst=relevant_data.get('sgst', 0),
+            total=relevant_data.get('total', 0),
+            note="AI Analyzed Bill",
+            team=request.team
+        )
+
+        # Bulk create VendorAnalyzedProduct entries
+        product_instances = [
+            TallyVendorAnalyzedProduct(
+                vendor_bill_analyzed=analyzed_bill,
+                item_details=item.get('description', ''),
+                price=float(item.get('price', 0) or 0),  # Ensure numeric value
+                quantity=int(item.get('quantity', 0) or 0),  # Ensure numeric value
+                amount=float(item.get('price', 0) or 0) * int(item.get('quantity', 0) or 0),  # Fix multiplication
+                team=request.team
+            ) for item in relevant_data.get('items', [])
+        ]
+        TallyVendorAnalyzedProduct.objects.bulk_create(product_instances)
+
+        # Update bill status
+        bill.status = "Analyzed"
+        bill.process = True
+        bill.save(update_fields=['status', 'process'])
+
+        messages.success(request, 'Bill analyzed and processed successfully!')
+
+    except (KeyError, ValueError) as e:
+        logger.error(f"Data parsing error: {e}")
+        messages.warning(request, f'Missing expected data: {e}')
+        return redirect('tally:vendor_bill_list', team_slug=team_slug)
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        messages.warning(request, f'An error occurred: {e}')
+        return redirect('tally:vendor_bill_list', team_slug=team_slug)
+
+    return redirect('tally:vendor_bill_analyzed', team_slug=team_slug)
+
+
+# ✅
+@login_and_team_required(login_url='account_login')
+def bill_verification_process(request, team_slug, bill_id):
+    """
+    Marks a bill as verified.
+    """
+    detailBill = get_object_or_404(TallyVendorBill, id=bill_id)
+    analysed_bill = get_object_or_404(TallyVendorAnalyzedBill, selectBill=detailBill)
+    analysed_products = TallyVendorAnalyzedProduct.objects.filter(vendor_bill_analyzed=analysed_bill).all()
+    if request.method == 'POST':
+        bill_form = VendorAnalyzedBillForm(request.POST)
+        # Update the analysed_bill and analysed_products based on POST data
+        analysed_bill.vendor_id = request.POST.get('vendor')
+        analysed_bill.note = request.POST.get('note')
+        analysed_bill.bill_no = request.POST.get('bill_no')
+        analysed_bill.bill_date = request.POST.get('bill_date')
+        analysed_bill.cgst = request.POST.get('cgst')
+        analysed_bill.sgst = request.POST.get('sgst')
+        analysed_bill.igst = request.POST.get('igst')
+        if request.POST.get('tax_type') == 'TDS':
+            analysed_bill.is_tax = 'TDS'
+            analysed_bill.tds_tcs_id = ZohoTdsTcs.objects.get(id=request.POST.get('tds_tcs_id'))
+        elif request.POST.get('tax_type') == 'TCS':
+            analysed_bill.is_tax = 'TCS'
+            analysed_bill.tds_tcs_id = ZohoTdsTcs.objects.get(id=request.POST.get('tds_tcs_id'))
+        else:
+            analysed_bill.is_tax = 'No'
+        for index, product in enumerate(analysed_products):
+            chart_key = f"form-{index}-chart_of_accounts"
+            chart_of_accounts_id = request.POST.get(chart_key)
+            if chart_of_accounts_id:
+                product.chart_of_accounts = ZohoChartOfAccount.objects.get(id=chart_of_accounts_id)
+            rct_key = f"form-{index}-reverse_charge_tax_id"
+            reverse_charge_tax_id = request.POST.get(rct_key)
+            if reverse_charge_tax_id == "yes":
+                product.reverse_charge_tax_id = True
+            else:
+                product.reverse_charge_tax_id = False
+            taxes_key = f"form-{index}-taxes"
+            taxes_id = request.POST.get(taxes_key)
+            if taxes_id:
+                product.taxes = ZohoTaxes.objects.get(id=taxes_id)
+            itc_key = f"form-{index}-itc_eligibility"
+            itc_eligibility_id = request.POST.get(itc_key)
+            if itc_eligibility_id:
+                product.itc_eligibility = itc_eligibility_id
+        # Save the updated analysed_bill and analysed_products
+        analysed_bill.team = request.team
+        analysed_bill.save()
+        for product in analysed_products:
+            product.team = request.team
+            product.save()
+        detailBill.status = "Verified"
+        detailBill.save()
+        return redirect('zoho:vendor_bill_analyzed', team_slug=team_slug)
+    else:
+        bill_form = TallyVendorAnalyzedBillForm(instance=analysed_bill,team=request.team)
+        formset = TallyVendorProductFormSet(
+            queryset=TallyVendorAnalyzedProduct.objects.filter(vendor_bill_analyzed=analysed_bill))
+    context = {'detailBill': detailBill, 'bill_form': bill_form, 'formset': formset,
+               'analysed_products': analysed_products, "heading": "Bill Verification"}
+    return render(request, 'tally/vendor/verify_bill.html', context)
+
+
+# ❌
+@login_and_team_required(login_url='account_login')
+def bill_sync_process(request, team_slug, bill_id):
+    """
+    Marks a bill as synced with Zoho.
+    """
+    pass
+
+
+# ✅
+@login_and_team_required(login_url='account_login')
+def synced_bill_detail(request, team_slug, bill_id):
+    detailBill = get_object_or_404(VendorBill, id=bill_id)
+    analysed_bill = get_object_or_404(VendorAnalyzedBill, selectBill=detailBill)
+    analysed_products = VendorAnalyzedProduct.objects.filter(vendor_bill_analyzed=analysed_bill).all()
+    bill_form = VendorAnalyzedBillForm(instance=analysed_bill)
+    formset = VendorProductFormSet(queryset=VendorAnalyzedProduct.objects.filter(vendor_bill_analyzed=analysed_bill))
+    context = {'detailBill': detailBill, 'bill_form': bill_form, 'formset': formset,
+               'analysed_products': analysed_products}
+    return render(request, 'zoho/vendor/synced_detail.html', context)
