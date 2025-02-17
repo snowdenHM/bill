@@ -1,10 +1,12 @@
+import re
 from rest_framework import status
 from rest_framework import viewsets
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
-
+from django.db import transaction
+from apps.teams.models import Team
 from apps.bills.tally.api.serializers import LedgerSerializer, InvoiceIDSerializer
 # Project Imports
 from apps.bills.tally.models import *
@@ -19,8 +21,8 @@ class LedgerViewSet(viewsets.ModelViewSet):
         # Print the full request URL
         full_url = request.build_absolute_uri()
         print(f"Full Request URL: {full_url}")
-
-        print("Incoming Data:", request.data)
+        match = re.search(r"/a/([^/]+)/bills/", request.path)
+        team = match.group(1) if match else None
         ledger_data = request.data.get("LEDGER", [])
 
         if not ledger_data:
@@ -35,7 +37,8 @@ class LedgerViewSet(viewsets.ModelViewSet):
                     parent_name = ledger_entry.get('Parent', '').strip()
 
                     # Fetch or create ParentLedger
-                    parent_ledger, _ = ParentLedger.objects.get_or_create(parent=parent_name)
+                    parent_ledger, _ = ParentLedger.objects.get_or_create(parent=parent_name,
+                                                                          team=Team.objects.get(slug=team))
 
                     # Prepare Ledger instance
                     ledger_instance = Ledger(
@@ -47,6 +50,7 @@ class LedgerViewSet(viewsets.ModelViewSet):
                         opening_balance=ledger_entry.get('OpeningBalance', '0'),
                         gst_in=ledger_entry.get('GSTIN'),
                         company=ledger_entry.get('Company'),
+                        team=Team.objects.get(slug=team)
                     )
                     ledger_instances.append(ledger_instance)
 
@@ -69,6 +73,7 @@ class LedgerViewSet(viewsets.ModelViewSet):
 
             return Response(response_data, status=status.HTTP_201_CREATED)
         except Exception as e:
+            print(e)
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 

@@ -1,7 +1,7 @@
 from django.shortcuts import render
 from django.db.models import Value
 from django.http import JsonResponse
-from apps.bills.tally.models import Ledger
+from apps.bills.tally.models import Ledger, ParentLedger
 from apps.teams.models import Team
 from apps.teams.decorators import login_and_team_required
 from django.db.models.functions import Trim, Replace
@@ -9,21 +9,9 @@ from django.db.models.functions import Trim, Replace
 
 @login_and_team_required(login_url='account_login')
 def ledger(request, team_slug):
-    team = Team.objects.get(slug=team_slug)
+    parent_ledger = ParentLedger.objects.filter(team=request.team)
 
-    # Remove \r and \n from the company field and trim any extra whitespace
-    allLedger = Ledger.objects.annotate(
-        cleaned_company=Trim(
-            Replace(
-                Replace('company', Value('\r'), Value('')),
-                Value('\n'),
-                Value('')
-            )
-        )
-    ).filter(cleaned_company=team.name)
-
-    print(allLedger)
-    context = {'allLedger': allLedger, "heading": "Tally Ledgers"}
+    context = {'allLedger': parent_ledger, "heading": "Tally Ledgers"}
     return render(request, 'tally/settings/ledgers.html', context)
 
 

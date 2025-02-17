@@ -1,5 +1,6 @@
 from django import forms
 from django.forms import modelformset_factory, Textarea
+from django.forms import BaseModelFormSet
 from apps.bills.tally.models import TallyVendorBill, TallyVendorAnalyzedProduct, TallyVendorAnalyzedBill, Ledger, \
     ParentLedger
 
@@ -39,7 +40,6 @@ class TallyVendorAnalyzedProductForm(forms.ModelForm):
     """
     Form for managing products in analyzed vendor bills.
     """
-    item_details = forms.CharField(widget=Textarea(attrs={'class': 'form-control'}))
 
     def __init__(self, *args, **kwargs):
         team = kwargs.pop('team', None)
@@ -56,8 +56,24 @@ class TallyVendorAnalyzedProductForm(forms.ModelForm):
 
 
 # ✅
-TallyVendorProductFormSet = modelformset_factory(
+class BaseTallyVendorProductFormSet(BaseModelFormSet):
+    """
+    Custom formset to pass 'team' parameter to each form.
+    """
+
+    def __init__(self, *args, **kwargs):
+        self.team = kwargs.pop('team', None)
+        super().__init__(*args, **kwargs)
+
+    def get_form_kwargs(self, index):
+        kwargs = super().get_form_kwargs(index)
+        kwargs.update({'team': self.team})
+        return kwargs
+
+
+TallyVendorProductFormSet = forms.modelformset_factory(
     TallyVendorAnalyzedProduct,
     form=TallyVendorAnalyzedProductForm,
+    formset=BaseTallyVendorProductFormSet,
     extra=0,
 )

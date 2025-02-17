@@ -84,7 +84,7 @@ class TallyVendorBill(BaseTeamModel):
         Automatically generates a unique billmunshiName if not provided.
         """
         if not self.billmunshiName:
-            highest_bill = VendorBill.objects.filter(billmunshiName__startswith='BM-TB-').order_by(
+            highest_bill = TallyVendorBill.objects.filter(billmunshiName__startswith='BM-TB-').order_by(
                 '-billmunshiName').first()
             if highest_bill:
                 match = re.match(r'BM-TB-(\d+)', highest_bill.billmunshiName)
@@ -147,3 +147,92 @@ class TallyVendorAnalyzedProduct(BaseTeamModel):
 
     def __str__(self):
         return self.item_name if self.item_name else "Unnamed Product"
+
+
+#### Expense Journal Bill
+class TallyExpenseBill(BaseTeamModel):
+    """
+    Stores expense bill details with an automated bill name generation.
+    """
+    BILL_STATUS = (
+        ('Draft', 'Draft'),
+        ('Analyzed', 'Analyzed'),
+        ('Verified', 'Verified'),
+        ('Synced', 'Synced')
+    )
+
+    BILL_TYPE = (
+        ('Single Invoice/File', 'Single Invoice/File'),
+        ('Multiple Invoice/File', 'Multiple Invoice/File'),
+    )
+
+    id = models.UUIDField(default=uuid.uuid4, unique=True, primary_key=True, editable=False)
+    billmunshiName = models.CharField(max_length=100, null=True, blank=True)
+    file = models.FileField(upload_to='bills/', validators=[validate_file_extension])
+    fileType = models.CharField(choices=BILL_TYPE, max_length=100, null=True, blank=True, default="Single Invoice/File")
+    analysed_data = models.JSONField(default=dict, null=True, blank=True)
+    status = models.CharField(max_length=10, choices=BILL_STATUS, default='Draft', blank=True)
+    process = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)  # Fixed typo: update_at -> updated_at
+
+    class Meta:
+        verbose_name_plural = 'Tally Expense Bills'
+
+    def __str__(self):
+        return self.billmunshiName if self.billmunshiName else "Unnamed Bill"
+
+    def save(self, *args, **kwargs):
+        """
+        Automatically generates a unique billmunshiName if not provided.
+        """
+        if not self.billmunshiName:
+            highest_bill = TallyExpenseBill.objects.filter(billmunshiName__startswith='BM-TB-').order_by(
+                '-billmunshiName').first()
+            if highest_bill:
+                match = re.match(r'BM-TE-(\d+)', highest_bill.billmunshiName)
+                next_number = int(match.group(1)) + 1 if match else 1
+            else:
+                next_number = 1
+
+            self.billmunshiName = f'BM-TE-{next_number}'
+
+        super().save(*args, **kwargs)
+
+
+#### Expense Journal Analyzed Bill
+class TallyExpenseAnalyzedBill(BaseTeamModel):
+    id = models.UUIDField(default=uuid.uuid4, unique=True, primary_key=True, editable=False)
+    selectBill = models.ForeignKey(TallyExpenseBill, on_delete=models.CASCADE, null=True, blank=True)
+    voucher = models.CharField(max_length=255)
+    voucher_number = models.CharField(max_length=255)
+    bill_no = models.CharField(max_length=50, null=True, blank=True)
+    bill_date = models.DateField(null=True, blank=True)
+    total = models.CharField(max_length=50, null=True, blank=True, default=0)
+    igst = models.CharField(max_length=50, null=True, blank=True, default=0)
+    cgst = models.CharField(max_length=50, null=True, blank=True, default=0)
+    sgst = models.CharField(max_length=50, null=True, blank=True, default=0)
+    note = models.CharField(max_length=100, null=True, blank=True, default="Enter Your Description")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name_plural = "Expense Analysed Bill"
+
+    def __str__(self):
+        return self.selectBill.billmunshiName
+
+
+#### Expense Journal Analyzed Product
+class TallyExpenseAnalyzedProduct(BaseTeamModel):
+    id = models.UUIDField(default=uuid.uuid4, unique=True, primary_key=True, editable=False)
+    expense_bill = models.ForeignKey(TallyExpenseAnalyzedBill, related_name='products', on_delete=models.CASCADE)
+    item_details = models.CharField(max_length=200, null=True, blank=True)
+    amount = models.CharField(max_length=10, null=True, blank=True)
+    debit_or_credit = models.CharField(max_length=10, null=True, blank=True, default='credit')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name_plural = "Expense Analysed Bill Products"
+
+    def __str__(self):
+        return self.expense_bill.selectBill.billmunshiName

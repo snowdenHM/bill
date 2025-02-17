@@ -338,7 +338,7 @@ def bill_verification_process(request, team_slug, bill_id):
     analysed_bill = get_object_or_404(TallyVendorAnalyzedBill, selectBill=detailBill)
     analysed_products = TallyVendorAnalyzedProduct.objects.filter(vendor_bill_analyzed=analysed_bill).all()
     if request.method == 'POST':
-        bill_form = VendorAnalyzedBillForm(request.POST)
+        bill_form = TallyVendorAnalyzedBillForm(request.POST)
         # Update the analysed_bill and analysed_products based on POST data
         analysed_bill.vendor_id = request.POST.get('vendor')
         analysed_bill.note = request.POST.get('note')
@@ -347,33 +347,15 @@ def bill_verification_process(request, team_slug, bill_id):
         analysed_bill.cgst = request.POST.get('cgst')
         analysed_bill.sgst = request.POST.get('sgst')
         analysed_bill.igst = request.POST.get('igst')
-        if request.POST.get('tax_type') == 'TDS':
-            analysed_bill.is_tax = 'TDS'
-            analysed_bill.tds_tcs_id = ZohoTdsTcs.objects.get(id=request.POST.get('tds_tcs_id'))
-        elif request.POST.get('tax_type') == 'TCS':
-            analysed_bill.is_tax = 'TCS'
-            analysed_bill.tds_tcs_id = ZohoTdsTcs.objects.get(id=request.POST.get('tds_tcs_id'))
-        else:
-            analysed_bill.is_tax = 'No'
         for index, product in enumerate(analysed_products):
-            chart_key = f"form-{index}-chart_of_accounts"
-            chart_of_accounts_id = request.POST.get(chart_key)
-            if chart_of_accounts_id:
-                product.chart_of_accounts = ZohoChartOfAccount.objects.get(id=chart_of_accounts_id)
-            rct_key = f"form-{index}-reverse_charge_tax_id"
-            reverse_charge_tax_id = request.POST.get(rct_key)
-            if reverse_charge_tax_id == "yes":
-                product.reverse_charge_tax_id = True
-            else:
-                product.reverse_charge_tax_id = False
             taxes_key = f"form-{index}-taxes"
             taxes_id = request.POST.get(taxes_key)
             if taxes_id:
-                product.taxes = ZohoTaxes.objects.get(id=taxes_id)
-            itc_key = f"form-{index}-itc_eligibility"
-            itc_eligibility_id = request.POST.get(itc_key)
-            if itc_eligibility_id:
-                product.itc_eligibility = itc_eligibility_id
+                product.taxes = Ledger.objects.get(id=taxes_id)
+            amount_key = f"form-{index}-amount"
+            amount_id = request.POST.get(amount_key)
+            if amount_id:
+                product.amount = amount_id
         # Save the updated analysed_bill and analysed_products
         analysed_bill.team = request.team
         analysed_bill.save()
@@ -382,33 +364,93 @@ def bill_verification_process(request, team_slug, bill_id):
             product.save()
         detailBill.status = "Verified"
         detailBill.save()
-        return redirect('zoho:vendor_bill_analyzed', team_slug=team_slug)
+        return redirect('tally:vendor_bill_analyzed', team_slug=team_slug)
     else:
-        bill_form = TallyVendorAnalyzedBillForm(instance=analysed_bill,team=request.team)
+        bill_form = TallyVendorAnalyzedBillForm(instance=analysed_bill, team=request.team)
         formset = TallyVendorProductFormSet(
-            queryset=TallyVendorAnalyzedProduct.objects.filter(vendor_bill_analyzed=analysed_bill))
+            queryset=TallyVendorAnalyzedProduct.objects.filter(vendor_bill_analyzed=analysed_bill), team=request.team)
     context = {'detailBill': detailBill, 'bill_form': bill_form, 'formset': formset,
                'analysed_products': analysed_products, "heading": "Bill Verification"}
     return render(request, 'tally/vendor/verify_bill.html', context)
 
 
-# ❌
+# ✅
 @login_and_team_required(login_url='account_login')
 def bill_sync_process(request, team_slug, bill_id):
     """
-    Marks a bill as synced with Zoho.
+    Marks a bill as synced with Tally.
     """
-    pass
+    try:
+        analysed_bill = TallyVendorAnalyzedBill.objects.get(selectBill=bill_id)
+        analysed_bill_products = analysed_bill.products.all()
+
+        # Try to get the vendor ledger, and if not found, set it to None
+        tally_ledger = Ledger.objects.filter(id=analysed_bill.vendor_id).first()
+
+        # Set "No Ledger" if vendorTally is None
+        tally_ledger_id = tally_ledger if tally_ledger else None
+
+        bill_date_str = analysed_bill.bill_date.strftime('%Y-%m-%d')  # Convert date to yyyy-mm-dd string
+        bill_data = {
+            "vendor_master_id": tally_ledger_id.master_id if tally_ledger_id else "No Ledger",
+            "vendor_name": tally_ledger_id.name if tally_ledger_id else "No Ledger",
+            "vendor_gst_in": tally_ledger_id.gst_in if tally_ledger_id else "No Ledger",
+            "vendor_company": tally_ledger_id.company if tally_ledger_id else "No Ledger",
+            "bill_number": analysed_bill.bill_no,
+            "date": bill_date_str,
+            "total": float(analysed_bill.total),
+            "igst": float(analysed_bill.igst),
+            "cgst": float(analysed_bill.cgst),
+            "sgst": float(analysed_bill.sgst),
+            "company_id": team_slug,
+            "line_items": []
+        }
+
+        for item in analysed_bill_products:
+            line_item = {
+                "item_name": item.item_name,
+                "item_details": item.item_details,
+                "taxes": str(item.taxes),
+                "price": str(item.price),
+                "quantity": str(item.quantity),
+                "amount": str(item.amount),
+            }
+            bill_data["line_items"].append(line_item)
+
+        print(json.dumps(bill_data, indent=4))
+        # payload = json.dumps(bill_data)
+        # Define the API endpoint URL where the payload should be sent
+        api_url = f'{settings.SERVER_URL}/a/{team_slug}/bills/tally/api/v1/vendor/'
+        # Send POST request to the API with the payload
+        response = requests.post(api_url, json=bill_data)
+        if response.status_code == 200:
+            billStatusUpdate = TallyVendorBill.objects.get(id=bill_id)
+            billStatusUpdate.status = "Synced"
+            billStatusUpdate.save()
+            messages.success(request, "Bill synced successfully with Tally.")
+            return redirect('tally:vendor_bill_synced', team_slug=team_slug)
+        else:
+            response_json = response.json()
+            error_message = response_json.get("message", "Failed to send data to Tally")
+            messages.error(request, error_message)
+            return redirect('tally:vendor_bill_analyzed', team_slug=team_slug)
+    except TallyVendorAnalyzedBill.DoesNotExist:
+        messages.error(request, "Bill not found.")
+        return redirect('tally:vendor_bill_analyzed', team_slug=team_slug)
+    except Exception as e:
+        messages.error(request, f"An error occurred: {e}")
+        return redirect('tally:vendor_bill_analyzed', team_slug=team_slug)
 
 
 # ✅
 @login_and_team_required(login_url='account_login')
 def synced_bill_detail(request, team_slug, bill_id):
-    detailBill = get_object_or_404(VendorBill, id=bill_id)
-    analysed_bill = get_object_or_404(VendorAnalyzedBill, selectBill=detailBill)
-    analysed_products = VendorAnalyzedProduct.objects.filter(vendor_bill_analyzed=analysed_bill).all()
-    bill_form = VendorAnalyzedBillForm(instance=analysed_bill)
-    formset = VendorProductFormSet(queryset=VendorAnalyzedProduct.objects.filter(vendor_bill_analyzed=analysed_bill))
+    detailBill = get_object_or_404(TallyVendorBill, id=bill_id)
+    analysed_bill = get_object_or_404(TallyVendorAnalyzedBill, selectBill=detailBill)
+    analysed_products = TallyVendorAnalyzedProduct.objects.filter(vendor_bill_analyzed=analysed_bill).all()
+    bill_form = TallyVendorAnalyzedBillForm(instance=analysed_bill, team=request.team)
+    formset = TallyVendorProductFormSet(
+        queryset=TallyVendorAnalyzedProduct.objects.filter(vendor_bill_analyzed=analysed_bill), team=request.team)
     context = {'detailBill': detailBill, 'bill_form': bill_form, 'formset': formset,
                'analysed_products': analysed_products}
-    return render(request, 'zoho/vendor/synced_detail.html', context)
+    return render(request, 'tally/vendor/synced_detail.html', context)

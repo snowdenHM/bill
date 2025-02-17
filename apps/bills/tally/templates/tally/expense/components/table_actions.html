@@ -1,0 +1,65 @@
+<div class="d-flex gap-3">
+    <!-- View Bill Button (Triggers Modal) -->
+    <button type="button" class="btn btn-primary btn-sm"
+            data-bs-toggle="modal"
+            data-bs-target="#billModal"
+            data-bill-id="{{ bill.id }}"
+            data-url="{% url 'zoho:view_expense_bill' team.slug bill.id %}">
+        View Bill
+    </button>
+    {% if bill.status == "Draft" %}
+        <a href="{% url 'zoho:expense_bill_analysis_process' team.slug bill.id %}">
+            <button type="button" class="btn btn-info btn-sm">Start
+                Analyze
+            </button>
+        </a>
+    {% elif bill.status == "Analyzed" %}
+        {% if bill.process %}
+            <a href="{% url 'zoho:expense_bill_verification_process' team.slug bill.id %}">
+                <button type="button" class="btn btn-sm btn-warning">
+                    Verify
+                </button>
+            </a>
+        {% endif %}
+    {% elif bill.status == "Verified" %}
+        {% if bill.process %}
+            <a href="{% url 'zoho:expense_bill_verification_process' team.slug bill.id %}">
+                <button type="button" class="btn btn-sm btn-warning">
+                    Re-Verify
+                </button>
+            </a>
+            <a href="{% url 'zoho:expense_bill_sync_process' team.slug bill.id %}">
+                <button type="button" class="btn btn-sm btn-success">
+                    Sync
+                </button>
+            </a>
+        {% endif %}
+    {% else %}
+        <a href="{% url 'zoho:expense_bills_sync_detail' team.slug bill.id %}">
+            <button type="button" class="btn btn-warning btn-sm">Detail</button>
+        </a>
+    {% endif %}
+    <a href="{% url 'zoho:expense_bill_delete' team.slug bill.id %}">
+        <button type="button" class="btn btn-danger btn-sm">Delete
+        </button>
+    </a>
+</div>
+
+<!-- Modal -->
+<div class="modal fade" id="billModal" tabindex="-1" aria-labelledby="billModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="billModalLabel">Bill Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="billContent">
+                    <!-- Bill image will be loaded here dynamically -->
+                    <p class="text-center">Loading...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+

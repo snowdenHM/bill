@@ -45,9 +45,9 @@
             <div class="card">
                 <div class="card-header">
                     <div class="d-sm-flex align-items-center justify-content-between">
-                        <h5 class="mb-3 mb-sm-0">Synced Bill</h5>
+                        <h5 class="mb-3 mb-sm-0">Bill Verification</h5>
                         <div>
-                            <a href="{% url 'zoho:vendor_bill_list' team.slug %}" class="btn btn-primary">
+                            <a href="{% url 'tally:vendor_bill_list' team.slug %}" class="btn btn-primary">
                                 Back
                             </a>
                         </div>
@@ -119,12 +119,9 @@
                                 <tr>
                                     <th>S.No.</th>
                                     <th>Item</th>
-                                    <th>Chart of Accounts</th>
                                     <th>Quantity</th>
-                                    <th>Rate</th>
+                                    <th>Prices</th>
                                     <th>Taxes</th>
-                                    <th>ITC Eligibility</th>
-                                    <th>RCT</th>
                                     <th>Amount</th>
                                 </tr>
                                 </thead>
@@ -137,42 +134,16 @@
                                     <tr id="data-{{ forloop.counter }}">
                                         <td>{{ forloop.counter }}</td>
                                         <td>{% render_field form.item_details class="form-control" rows='1' %}</td>
-                                        <td>{% render_field form.chart_of_accounts class="js-example-basic-single" %}</td>
                                         <td>{% render_field form.quantity class="form-control" %}</td>
-                                        <td>{% render_field form.rate class="form-control" %}</td>
+                                        <td>{% render_field form.price class="form-control" %}</td>
                                         <td>{% render_field form.taxes class="js-example-basic-single" %}</td>
-                                        <td>{% render_field form.itc_eligibility class="form-select" %}</td>
-                                        <td>{% render_field form.reverse_charge_tax_id value="yes" name=form.reverse_charge_tax_id %}</td>
                                         <td>{% render_field form.amount class="form-control" %}</td>
                                     </tr>
                                 {% endfor %}
                                 </tbody>
                             </table>
                         </div>
-                        <!-- TDS/TCS/ -->
-                        <div class="row m-2">
-                            <div class="col-md-6">
-                                <div class="form-group">
-                                    <label for="tax_type">Tax Type:</label><br>
-                                    <input type="radio" id="tds" name="tax_type" value="TDS">
-                                    <label for="tds">TDS</label>
-                                    <input type="radio" id="tcs" name="tax_type" value="TCS">
-                                    <label for="tcs">TCS</label>
-                                    <input type="radio" id="none" name="tax_type" value="None">
-                                    <label for="none">None</label>
-                                </div>
-                            </div>
-                            <!-- Dropdown for Tax Data -->
-                            <div class="col-md-6">
-                                <div class="form-group" id="taxValueColumn" style="display: none;">
-                                    <label for="taxValueId">Tax Data:</label>
-                                    <select id="taxValueId" class="form-control js-example-basic-single"
-                                            name="tds_tcs_id">
-                                        <!-- Dynamically filled options will go here -->
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
+
                         <!-- CGST/IGST/SGST -->
                         <div class="row m-2">
                             <div class="col-md-3">
@@ -208,7 +179,9 @@
                             {% render_field bill_form.note class="form-control" %}
                             {{ bill_form.note.errors }}
                         </div>
-
+{#                        <div class="row m-4">#}
+{#                            <button type="submit" class="btn btn-success">Save</button>#}
+{#                        </div>#}
                     </form>
                 </div>
             </div>
@@ -250,7 +223,7 @@
 
                 // Make an AJAX request to fetch the GST information for the selected vendor
                 $.ajax({
-                    url: '{% url 'zoho:fetchVendorGst' team.slug %}', // Replace with the actual URL to fetch GST information
+                    url: '{% url 'tally:tally_fetch_vendor_gst' team.slug %}', // Replace with the actual URL to fetch GST information
                     method: 'GET',
                     data: {vendor_id: selectedVendorId},
                     success: function (data) {
@@ -275,84 +248,7 @@
             }
         });
     </script>
-    <!-- Script to Fetch Tax Data and Update Dropdown, with Django URL -->
-    <script type="text/javascript">
-        document.addEventListener('DOMContentLoaded', function () {
-            let fetchTaxDataURL = "{% url 'zoho:fetch_tax_data' team.slug %}";
-            let isTax = "{{ bill_form.is_tax.value }}";
 
-            // Function to toggle the display of the tax data dropdown
-            function toggleTaxDataDropdown(show) {
-                document.getElementById('taxValueColumn').style.display = show ? 'block' : 'none';
-            }
-
-            // Function to fetch and populate the tax data dropdown
-            function fetchAndPopulateTaxData(taxType) {
-                const dropdown = document.getElementById('taxValueId');
-                // Clear existing options
-                while (dropdown.options.length > 0) {
-                    dropdown.remove(0);
-                }
-
-                // Only fetch data if taxType is 'TDS' or 'TCS'
-                if (taxType === 'TDS' || taxType === 'TCS') {
-                    // Fetch tax data from the server
-                    fetch(`${fetchTaxDataURL}?tax_type=${taxType}`)
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data && data.length > 0) {
-                                // Populate dropdown with new options
-                                data.forEach(item => {
-                                    const option = new Option(`${item.taxName} (${item.taxPercentage}%)`, item.id);
-                                    dropdown.add(option);
-                                });
-                            } else {
-                                // Handle case when no data is returned
-                                const option = new Option('No data available', '');
-                                dropdown.add(option);
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Error fetching tax data:', error);
-                            const option = new Option('Error loading data', '');
-                            dropdown.add(option);
-                        });
-                }
-            }
-
-            // Set the initial state based on the server-side value
-            switch (isTax) {
-                case "TDS":
-                    document.getElementById('tds').checked = true;
-                    toggleTaxDataDropdown(true);
-                    fetchAndPopulateTaxData('TDS');
-                    break;
-                case "TCS":
-                    document.getElementById('tcs').checked = true;
-                    toggleTaxDataDropdown(true);
-                    fetchAndPopulateTaxData('TCS');
-                    break;
-                default:
-                    // This covers "None" and any other unexpected value
-                    document.getElementById('none').checked = true;
-                    toggleTaxDataDropdown(false);
-                    break;
-            }
-
-            // Attach event listeners to the radio buttons to handle changes
-            document.querySelectorAll('input[name="tax_type"]').forEach(radio => {
-                radio.addEventListener('change', function () {
-                    if (this.value === "TDS" || this.value === "TCS") {
-                        toggleTaxDataDropdown(true);
-                        fetchAndPopulateTaxData(this.value);
-                    } else {
-                        // "None" or other selections hide the dropdown
-                        toggleTaxDataDropdown(false);
-                    }
-                });
-            });
-        });
-    </script>
 
 {% endblock %}
 
