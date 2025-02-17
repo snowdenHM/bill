@@ -47,8 +47,8 @@
 
 {% block css1 %}
     <!-- Add your CSS block content here if any -->
-    <link rel="stylesheet" href={% static "libs/simple-datatables/dist/style.css" %}/>
-    <link rel="stylesheet" href={% static "libs/notifier-js/dist/css/notifier.css" %}/>
+    <link href="{% static "libs/simple-datatables/dist/style.css" %}" rel="stylesheet"/>
+    <link href="{% static "libs/notifier-js/dist/css/notifier.css" %}" rel="stylesheet"/>
 {% endblock %}
 
 {% block css2 %}
