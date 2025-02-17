@@ -11,8 +11,8 @@
     <div class="auth-main">
         <div class="auth-wrapper v2">
             <div class="auth-sidecontent">
-                <img alt="images" class="img-fluid img-auth-side"
-                     src={% static "assets/images/authentication/img-auth-sideimg.jpg" %}/>
+                <img src={% static "assets/images/authentication/img-auth-sideimg.jpg" %} alt="images"
+                     class="img-fluid img-auth-side"/>
             </div>
             <div class="auth-form">
                 <div class="card my-5">
@@ -29,7 +29,7 @@
                             {% render_text_input form.password %}
                             <input class="btn btn-primary w-100" type="submit" value="Sign In">
                         </form>
-{#                        {% if LOGIN_BY_CODE_ENABLED %}#}
+                        {#                        {% if LOGIN_BY_CODE_ENABLED %}#}
                         {#                            <p class="pg-text-centered pg-text-muted">#}
                         {#                                <a class="text-sm muted-link" href="{{ request_login_code_url }}">#}
                         {#                                    Mail me a sign-in code#}
