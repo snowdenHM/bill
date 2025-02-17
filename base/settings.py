@@ -15,7 +15,7 @@ SECRET_KEY = env("SECRET_KEY", default="django-insecure-vTA7Mk3amTPdLCSuduER9I0o
 DEBUG = env.bool("DEBUG", default=True)
 ENABLE_DEBUG_TOOLBAR = env.bool("ENABLE_DEBUG_TOOLBAR", default=False) and "test" not in sys.argv
 
-ALLOWED_HOSTS = ["*","192.168.1.2"]
+ALLOWED_HOSTS = ["*","192.168.1.2","billmunshi.com", 'www.billmunshi.com']
 
 # System Application
 DJANGO_APPS = [
