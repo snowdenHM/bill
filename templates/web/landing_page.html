@@ -6,14 +6,14 @@
 
 {% block css1 %}
     <!-- [Page specific CSS] start -->
-    <link href={% static "/libs/animate.css/animate.min.css" %} rel="stylesheet" type="text/css"/>
+    <link href="{% static "/libs/animate.css/animate.min.css" %}" rel="stylesheet" type="text/css"/>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/OwlCarousel2/2.3.4/assets/owl.carousel.min.css"
           rel="stylesheet"/>
 {% endblock %}
 
 {% block css2 %}
-    <link rel="stylesheet" href={% static "/assets/css/landing.css" %}/>
-    <script src={% static "/assets/js/tech-stack.js" %}></script>
+    <link href="{% static "assets/css/landing.css" %}" rel="stylesheet"/>
+    <script src="{% static "assets/js/tech-stack.js" %}"></script>
 {% endblock %}
 
 {% block mainContent %}
