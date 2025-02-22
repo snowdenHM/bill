@@ -72,7 +72,7 @@ class ExpenseAnalyzedProductForm(forms.ModelForm):
 
     class Meta:
         model = ExpenseAnalyzedProduct
-        fields = ['item_details', 'chart_of_accounts', 'amount', 'vendor', 'debit_or_credit']
+        fields = ['item_details', 'chart_of_accounts', 'amount', 'debit_or_credit']
 
 
 # ✅ Fixed: Explicitly added `fields` to avoid ImproperlyConfigured error

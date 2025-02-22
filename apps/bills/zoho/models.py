@@ -340,7 +340,6 @@ class ExpenseAnalyzedProduct(BaseTeamModel):
     expense_analyzed_bill = models.ForeignKey(ExpenseAnalyzedBill, on_delete=models.CASCADE, related_name='products')
     item_details = models.TextField(null=True, blank=True)
     chart_of_accounts = models.ForeignKey(ZohoChartOfAccount, on_delete=models.CASCADE, null=True, blank=True)
-    vendor = models.ForeignKey(ZohoVendor, on_delete=models.CASCADE, null=True, blank=True)
     amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     debit_or_credit = models.CharField(choices=EXPENSE_TYPE_CHOICES, max_length=10, null=True, blank=True,
                                        default='credit')
