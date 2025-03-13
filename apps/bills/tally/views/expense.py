@@ -17,13 +17,13 @@ from django.http import JsonResponse
 # OpenAI Import
 from openai import OpenAI
 
+from apps.bills.tally.api.api_views import TallyVendor
 from apps.teams.decorators import login_and_team_required
-from apps.bills.zoho.forms import (
+from apps.bills.tally.forms import (
     ExpenseBillForm, ExpenseAnalyzedBillForm, ExpenseAnalyzedProductForm, ExpenseProductFormSet
 )
-from apps.bills.zoho.models import (
-    ExpenseBill, ExpenseAnalyzedBill, ExpenseAnalyzedProduct, ZohoVendor,
-    ZohoChartOfAccount, ZohoTaxes, ZohoCredentials
+from apps.bills.tally.models import (
+    TallyExpenseBill, TallyExpenseAnalyzedBill, TallyExpenseAnalyzedProduct
 )
 
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
@@ -36,9 +36,9 @@ def expense_bills(request, team_slug):
     """
     Retrieves all expense bills for the current team and displays them in the expense main page.
     """
-    bills = ExpenseBill.objects.filter(team=request.team).order_by('-created_at')
+    bills = TallyExpenseBill.objects.filter(team=request.team).order_by('-created_at')
     context = {'bills': bills, 'heading': 'Expense Bills List'}
-    return render(request, 'zoho/expense/main.html', context)
+    return render(request, 'tally/expense/main.html', context)
 
 
 # ✅ Create Expense Bill
@@ -56,7 +56,7 @@ def expense_bill_create(request, team_slug):
             # Restrict PDF uploads for 'Single Invoice/File'
             if bill.fileType == 'Single Invoice/File' and bill.file.name.endswith('.pdf'):
                 messages.error(request, 'PDF upload is not allowed for Single Invoice/File.')
-                return redirect('zoho:expense_bill_list', team_slug=team_slug)
+                return redirect('tally:expense_bill_list', team_slug=team_slug)
 
             # Handle PDF splitting for 'Multiple Invoice/File'
             if bill.fileType == 'Multiple Invoice/File' and bill.file.name.endswith('.pdf'):
@@ -75,7 +75,7 @@ def expense_bill_create(request, team_slug):
                             image_io.seek(0)
 
                             # Create separate VendorBill for each page
-                            ExpenseBill.objects.create(
+                            TallyExpenseBill.objects.create(
                                 billmunshiName=f"BM-Page-{page_num + 1}-{unique_id}",
                                 file=ContentFile(image_io.read(), name=f"BM-Page-{page_num + 1}-{unique_id}.jpg"),
                                 fileType=bill.fileType,
@@ -84,20 +84,20 @@ def expense_bill_create(request, team_slug):
                             )
 
                     messages.success(request, 'Bill uploaded and split successfully!')
-                    return redirect('zoho:expense_bill_list', team_slug=team_slug)
+                    return redirect('tally:expense_bill_list', team_slug=team_slug)
 
                 except Exception as e:
                     messages.error(request, f'Error processing PDF: {str(e)}')
-                    return redirect('zoho:expense_bill_list', team_slug=team_slug)
+                    return redirect('tally:expense_bill_list', team_slug=team_slug)
 
             # Save bill for non-PDF uploads
             bill.save()
             messages.success(request, 'Bill uploaded successfully!')
-            return redirect('zoho:expense_bill_list', team_slug=team_slug)
+            return redirect('tally:expense_bill_list', team_slug=team_slug)
     else:
         form = ExpenseBillForm()
 
-    return render(request, 'zoho/expense/bill_upload.html', {'form': form, 'heading': 'Create Vendor Bill'})
+    return render(request, 'tally/expense/bill_upload.html', {'form': form, 'heading': 'Create Vendor Bill'})
 
 
 # ✅ Delete Expense Bill
@@ -106,7 +106,7 @@ def expense_bill_delete(request, team_slug, bill_id):
     """
     Deletes an expense bill and removes its associated file from storage.
     """
-    bill = get_object_or_404(ExpenseBill, id=bill_id)
+    bill = get_object_or_404(TallyExpenseBill, id=bill_id)
 
     # Delete the file from storage if it exists
     if bill.file:
@@ -118,7 +118,7 @@ def expense_bill_delete(request, team_slug, bill_id):
     bill.delete()
 
     messages.success(request, 'Expense bill and associated file deleted successfully!')
-    return redirect('zoho:expense_bill_list', team_slug=team_slug)
+    return redirect('tally:expense_bill_list', team_slug=team_slug)
 
 
 # ✅ Draft Expense Bills
@@ -127,9 +127,9 @@ def expense_bill_drafts(request, team_slug):
     """
     Retrieves all draft expense bills for the current team.
     """
-    draft_bills = ExpenseBill.objects.filter(team=request.team, status="Draft")
+    draft_bills = TallyExpenseBill.objects.filter(team=request.team, status="Draft")
     context = {'draft_bills': draft_bills, 'heading': 'Draft Expense Bills'}
-    return render(request, 'zoho/expense/draft.html', context)
+    return render(request, 'tally/expense/draft.html', context)
 
 
 # ✅ Analyzed Expense Bills
@@ -138,11 +138,11 @@ def expense_bill_analyzed(request, team_slug):
     """
     Retrieves all analyzed expense bills.
     """
-    analyzed_bills = ExpenseBill.objects.filter(
+    analyzed_bills = TallyExpenseBill.objects.filter(
         Q(team=request.team) & (Q(status="Analyzed") | Q(status="Verified"))
     )
     context = {'analyzed_bills': analyzed_bills, 'heading': 'Analyzed Expense Bills'}
-    return render(request, 'zoho/expense/analyzed.html', context)
+    return render(request, 'tally/expense/analyzed.html', context)
 
 
 # ✅ Synced Expense Bills
@@ -151,9 +151,9 @@ def expense_bill_synced(request, team_slug):
     """
     Retrieves all synced expense bills.
     """
-    synced_bills = ExpenseBill.objects.filter(team=request.team, status="Synced")
+    synced_bills = TallyExpenseBill.objects.filter(team=request.team, status="Synced")
     context = {'synced_bills': synced_bills, 'heading': 'Synced Expense Bills'}
-    return render(request, 'zoho/expense/synced.html', context)
+    return render(request, 'tally/expense/synced.html', context)
 
 
 # ✅ View Bill
@@ -162,7 +162,7 @@ def view_bill(request, team_slug, bill_id):
     """
     Returns the bill image URL as a JSON response.
     """
-    bill = get_object_or_404(ExpenseBill, id=bill_id)
+    bill = get_object_or_404(TallyExpenseBill, id=bill_id)
 
     if bill.file:
         return JsonResponse({"image_url": bill.file.url})
@@ -176,7 +176,7 @@ def expense_bill_analysis_process(request, team_slug, bill_id):
     """
     Analyzes and processes a vendor bill using AI.
     """
-    bill = get_object_or_404(ExpenseBill, id=bill_id)
+    bill = get_object_or_404(TallyExpenseBill, id=bill_id)
 
     # Read the file and convert to Base64
     try:
@@ -185,7 +185,7 @@ def expense_bill_analysis_process(request, team_slug, bill_id):
     except Exception as error:
         logger.error(f"Error reading bill file: {error}")
         messages.warning(request, 'Error reading the bill file.')
-        return redirect('zoho:vendor_bill_list', team_slug=team_slug)
+        return redirect('tally:vendor_bill_list', team_slug=team_slug)
 
     # JSON Schema for AI extraction
     invoice_schema = {
@@ -236,69 +236,92 @@ def expense_bill_analysis_process(request, team_slug, bill_id):
     except Exception as error:
         logger.error(f"AI processing failed: {error}")
         messages.warning(request, 'AI processing failed.')
-        return redirect('zoho:vendor_bill_list', team_slug=team_slug)
+        return redirect('tally:vendor_bill_list', team_slug=team_slug)
 
     # Save extracted data to the bill object
     try:
-        if "properties" in json_data:
-            relevant_data = {
-                "invoiceNumber": json_data["properties"]["invoiceNumber"]["const"],
-                "dateIssued": json_data["properties"]["dateIssued"]["const"],
-                "dueDate": json_data["properties"]["dueDate"]["const"],
-                "from": json_data["properties"]["from"]["properties"],
-                "to": json_data["properties"]["to"]["properties"],
-                "items": [{"description": item["description"]["const"], "quantity": item["quantity"]["const"],
-                           "price": item["price"]["const"]} for item in json_data["properties"]["items"]["items"]],
-                "total": json_data["properties"]["total"]["const"],
-                "igst": json_data["properties"]["igst"]["const"],
-                "cgst": json_data["properties"]["cgst"]["const"],
-                "sgst": json_data["properties"]["sgst"]["const"],
-            }
-        else:
-            relevant_data = json_data
+        relevant_data = json_data if "properties" not in json_data else {
+            "invoiceNumber": json_data["properties"]["invoiceNumber"]["const"],
+            "dateIssued": json_data["properties"]["dateIssued"]["const"],
+            "dueDate": json_data["properties"]["dueDate"]["const"],
+            "from": json_data["properties"]["from"]["properties"],
+            "to": json_data["properties"]["to"]["properties"],
+            "items": [
+                {
+                    "description": item["description"]["const"],
+                    "quantity": item["quantity"]["const"],
+                    "price": item["price"]["const"]
+                } for item in json_data["properties"]["items"]["items"]
+            ],
+            "total": json_data["properties"]["total"]["const"],
+            "igst": json_data["properties"]["igst"]["const"],
+            "cgst": json_data["properties"]["cgst"]["const"],
+            "sgst": json_data["properties"]["sgst"]["const"],
+        }
+
         bill.analysed_data = relevant_data
         bill.save(update_fields=['analysed_data'])
     except Exception as error:
         logger.error(f"Error saving bill data: {error}")
         messages.warning(request, 'Error saving Bill data.')
-        return redirect('zoho:expense_bill_list', team_slug=team_slug)
+        return redirect('tally:expense_bill_list', team_slug=team_slug)
 
     # Extract required fields safely
     try:
         invoice_number = relevant_data.get('invoiceNumber', '').strip()
         date_issued = relevant_data.get('dateIssued', '')
-        company_name = relevant_data.get('from', {}).get('name', '').strip().lower()
-
         date_issued = datetime.strptime(date_issued, '%Y-%m-%d').date() if date_issued else None
 
-        # Find vendor (case-insensitive search)
-        vendor = ZohoVendor.objects.annotate(lower_name=Lower('companyName')).filter(
-            lower_name=company_name).first()
-
         # Create ExpenseAnalyzedBill entry
-        analyzed_bill = ExpenseAnalyzedBill.objects.create(
+        analyzed_bill = TallyExpenseAnalyzedBill.objects.create(
             selectBill=bill,
-            vendor=vendor,
+            voucher=invoice_number,
             bill_no=invoice_number,
             bill_date=date_issued,
-            igst=relevant_data.get('igst', 0),
-            cgst=relevant_data.get('cgst', 0),
-            sgst=relevant_data.get('sgst', 0),
-            total=relevant_data.get('total', 0),
+            igst=str(float(relevant_data.get('igst', 0) or 0)),
+            cgst=str(float(relevant_data.get('cgst', 0) or 0)),
+            sgst=str(float(relevant_data.get('sgst', 0) or 0)),
+            total=str(float(relevant_data.get('total', 0) or 0)),
             note="AI Analyzed Bill",
             team=request.team
         )
 
         # Bulk create ExpenseAnalyzedProduct entries
-        product_instances = [
-            ExpenseAnalyzedProduct(
-                expense_analyzed_bill=analyzed_bill,
-                item_details=item.get('description', ''),
-                amount=item.get('price', 0) * item.get('quantity', 0),
+        product_instances = []
+        for item in relevant_data.get('items', []):
+            price = float(item.get('price', 0) or 0)
+            quantity = float(item.get('quantity', 0) or 0)
+            amount = price * quantity
+
+            product_instances.append(
+                TallyExpenseAnalyzedProduct(
+                    expense_bill=analyzed_bill,
+                    item_details=item.get('description', ''),
+                    amount=str(amount),  # Convert to string
+                    team=request.team
+                )
+            )
+
+        # Add default CGST and SGST products
+        product_instances.append(
+            TallyExpenseAnalyzedProduct(
+                expense_bill=analyzed_bill,
+                item_details="CGST",
+                amount=str(float(relevant_data.get('cgst', 0) or 0)),
                 team=request.team
-            ) for item in relevant_data.get('items', [])
-        ]
-        ExpenseAnalyzedProduct.objects.bulk_create(product_instances)
+            )
+        )
+
+        product_instances.append(
+            TallyExpenseAnalyzedProduct(
+                expense_bill=analyzed_bill,
+                item_details="SGST",
+                amount=str(float(relevant_data.get('sgst', 0) or 0)),
+                team=request.team
+            )
+        )
+
+        TallyExpenseAnalyzedProduct.objects.bulk_create(product_instances)
 
         # Update bill status
         bill.status = "Analyzed"
@@ -310,13 +333,13 @@ def expense_bill_analysis_process(request, team_slug, bill_id):
     except (KeyError, ValueError) as e:
         logger.error(f"Data parsing error: {e}")
         messages.warning(request, f'Missing expected data: {e}')
-        return redirect('zoho:expense_bill_list', team_slug=team_slug)
+        return redirect('tally:expense_bill_list', team_slug=team_slug)
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
         messages.warning(request, f'An error occurred: {e}')
-        return redirect('zoho:expense_bill_list', team_slug=team_slug)
+        return redirect('tally:expense_bill_list', team_slug=team_slug)
 
-    return redirect('zoho:expense_bill_list', team_slug=team_slug)
+    return redirect('tally:expense_bill_list', team_slug=team_slug)
 
 
 # ✅Verify Expense Bill
@@ -325,9 +348,9 @@ def expense_bill_verification_process(request, team_slug, bill_id):
     """
     Marks a bill as verified.
     """
-    detailBill = get_object_or_404(ExpenseBill, id=bill_id)
-    analysed_bill = get_object_or_404(ExpenseAnalyzedBill, selectBill=detailBill)
-    analysed_products = ExpenseAnalyzedProduct.objects.filter(expense_analyzed_bill=analysed_bill).all()
+    detailBill = get_object_or_404(TallyExpenseBill, id=bill_id)
+    analysed_bill = get_object_or_404(TallyExpenseAnalyzedBill, selectBill=detailBill)
+    analysed_products = TallyExpenseAnalyzedProduct.objects.filter(expense_bill=analysed_bill).all()
     if request.method == 'POST':
         bill_form = ExpenseAnalyzedBillForm(request.POST, instance=analysed_bill)
         formset = ExpenseProductFormSet(request.POST, queryset=analysed_products)
@@ -349,46 +372,30 @@ def expense_bill_verification_process(request, team_slug, bill_id):
                         form.instance.delete()
             detailBill.status = "Verified"
             detailBill.save()
-            return redirect('zoho:expense_bill_analyzed', team_slug=team_slug)
+            return redirect('tally:expense_bill_analyzed', team_slug=team_slug)
         else:
             print("Forms Error:", bill_form.errors)
             print("Formset Error:", formset.errors)
             messages.warning(request, 'Server Error! Contact Service Provider')
-            return redirect('zoho:expense_bill_analyzed', team_slug=team_slug)
+            return redirect('tally:expense_bill_analyzed', team_slug=team_slug)
     else:
         bill_form = ExpenseAnalyzedBillForm(instance=analysed_bill)
-        formset = ExpenseProductFormSet(queryset=analysed_products)
+        formset = ExpenseProductFormSet(queryset=analysed_products, team=request.team)
     context = {'detailBill': detailBill, 'bill_form': bill_form, 'formset': formset,
                'analysed_products': analysed_products, "heading": "Bill Verification"}
-    return render(request, 'zoho/expense/verify_bill.html', context)
+    return render(request, 'tally/expense/verify_bill.html', context)
 
 
-def refresh_zoho_access_token(currentToken):
-    refresh_token = currentToken.refreshToken
-    client_id = currentToken.clientId
-    client_secret = currentToken.clientSecret
-    url = f"https://accounts.zoho.in/oauth/v2/token?refresh_token={refresh_token}&client_id={client_id}&client_secret={client_secret}&grant_type=refresh_token"
-    response = requests.post(url)
-    if response.status_code == 200:
-        new_access_token = response.json().get('access_token')
-        currentToken.accessToken = new_access_token
-        currentToken.save()
-        return new_access_token
-    else:
-        return None
-
-
-# 🚀 Sync Expense Bill with Zoho
+# 🚀 Sync Expense Bill with tally
 @login_and_team_required(login_url='account_login')
 def expense_bill_sync_process(request, team_slug, bill_id):
     """
-    Marks an expense bill as synced with Zoho.
+    Marks an expense bill as synced with tally.
     """
     try:
-        billSyncProcess = ExpenseAnalyzedBill.objects.get(selectBill=bill_id)
-        zoho_products = billSyncProcess.products.all()
-
-        vendorZohoId = ZohoVendor.objects.get(id=billSyncProcess.vendor_id)
+        billSyncProcess = TallyExpenseAnalyzedBill.objects.get(selectBill=bill_id)
+        tally_products = billSyncProcess.products.all()
+        vendortallyId = tallyVendor.objects.get(id=billSyncProcess.vendor_id)
         bill_date_str = billSyncProcess.bill_date.strftime('%Y-%m-%d')  # Convert date to yyyy-mm-dd string
 
         bill_data = {
@@ -398,27 +405,27 @@ def expense_bill_sync_process(request, team_slug, bill_id):
             "line_items": []
         }
 
-        for item in zoho_products:
+        for item in tally_products:
             line_item = {
                 "description": item.item_details,
-                "account_id": str(ZohoChartOfAccount.objects.get(accountName=item.chart_of_accounts).accountId),
-                "customer_id": str(ZohoVendor.objects.get(companyName=item.vendor).contactId),
+                "account_id": str(tallyChartOfAccount.objects.get(accountName=item.chart_of_accounts).accountId),
+                "customer_id": str(tallyVendor.objects.get(companyName=item.vendor).contactId),
                 "amount": float(item.amount),
                 "debit_or_credit": item.debit_or_credit
             }
             bill_data["line_items"].append(line_item)
 
-        currentToken = ZohoCredentials.objects.get(team=request.team)
-        url = f"https://www.zohoapis.in/books/v3/journals?organization_id={currentToken.organisationId}"
+        currentToken = tallyCredentials.objects.get(team=request.team)
+        url = f"https://www.tallyapis.in/books/v3/journals?organization_id={currentToken.organisationId}"
         payload = json.dumps(bill_data)
         headers = {
-            'Authorization': f'Zoho-oauthtoken {currentToken.accessToken}',
+            'Authorization': f'tally-oauthtoken {currentToken.accessToken}',
         }
         response = requests.post(url, headers=headers, data=payload)
         if response.status_code == 401:
-            new_access_token = refresh_zoho_access_token(currentToken)
+            new_access_token = refresh_tally_access_token(currentToken)
             if new_access_token:
-                headers['Authorization'] = f'Zoho-oauthtoken {new_access_token}'
+                headers['Authorization'] = f'tally-oauthtoken {new_access_token}'
                 response = requests.post(url, headers=headers, data=payload)
 
         if response.status_code == 201:
@@ -426,38 +433,29 @@ def expense_bill_sync_process(request, team_slug, bill_id):
             billStatusUpdate.status = "Synced"
             billStatusUpdate.save()
             messages.success(request, "Bill Synced Successfully")
-            return redirect('zoho:expense_bill_synced', team_slug=team_slug)
+            return redirect('tally:expense_bill_synced', team_slug=team_slug)
         else:
             response_json = response.json()
-            error_message = response_json.get("message", "Failed to send data to Zoho")
+            error_message = response_json.get("message", "Failed to send data to tally")
             messages.error(request, error_message)
-            return redirect('zoho:expense_bill_analyzed', team_slug=team_slug)
+            return redirect('tally:expense_bill_analyzed', team_slug=team_slug)
 
-    except ExpenseAnalyzedBill.DoesNotExist:
+    except TallyExpenseAnalyzedBill.DoesNotExist:
         messages.error(request, "The specified bill does not exist.")
-        return redirect('zoho:expense_bill_analyzed', team_slug=team_slug)
-    except ZohoVendor.DoesNotExist:
-        messages.error(request, "Please select vendor against Accounts Payable item.")
-        return redirect('zoho:expense_bill_analyzed', team_slug=team_slug)
-    except ZohoChartOfAccount.DoesNotExist:
-        messages.error(request, "The specified chart of account does not exist.")
-        return redirect('zoho:expense_bill_analyzed', team_slug=team_slug)
-    except ZohoCredentials.DoesNotExist:
-        messages.error(request, "The Zoho credentials are not set.")
-        return redirect('zoho:expense_bill_analyzed', team_slug=team_slug)
+        return redirect('tally:expense_bill_analyzed', team_slug=team_slug)
     except Exception as e:
         messages.error(request, f"An error occurred: {e}")
-        return redirect('zoho:expense_bill_analyzed', team_slug=team_slug)
+        return redirect('tally:expense_bill_analyzed', team_slug=team_slug)
 
 
 # ✅View Synced Bill in detail
 @login_and_team_required(login_url='account_login')
 def expense_synced_bill_detail(request, team_slug, bill_id):
-    detailBill = get_object_or_404(ExpenseBill, id=bill_id)
-    analysed_bill = get_object_or_404(ExpenseAnalyzedBill, selectBill=detailBill)
-    analysed_products = ExpenseAnalyzedProduct.objects.filter(expense_analyzed_bill=analysed_bill).all()
+    detailBill = get_object_or_404(TallyExpenseBill, id=bill_id)
+    analysed_bill = get_object_or_404(TallyExpenseAnalyzedBill, selectBill=detailBill)
+    analysed_products = TallyExpenseAnalyzedProduct.objects.filter(expense_analyzed_bill=analysed_bill).all()
     bill_form = ExpenseAnalyzedBillForm(instance=analysed_bill)
     formset = ExpenseProductFormSet(queryset=ExpenseAnalyzedProduct.objects.filter(expense_analyzed_bill=analysed_bill))
     context = {'detailBill': detailBill, 'bill_form': bill_form, 'formset': formset,
                'analysed_products': analysed_products}
-    return render(request, 'zoho/expense/synced_detail.html', context)
+    return render(request, 'tally/expense/synced_detail.html', context)

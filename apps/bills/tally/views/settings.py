@@ -9,8 +9,7 @@ from django.db.models.functions import Trim, Replace
 
 @login_and_team_required(login_url='account_login')
 def ledger(request, team_slug):
-    parent_ledger = ParentLedger.objects.filter(team=request.team)
-
+    parent_ledger = ParentLedger.objects.filter(team=request.team).prefetch_related('ledger_set')
     context = {'allLedger': parent_ledger, "heading": "Tally Ledgers"}
     return render(request, 'tally/settings/ledgers.html', context)
 

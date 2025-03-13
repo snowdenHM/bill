@@ -17,7 +17,7 @@
 
 {% block mainContent %}
     <!-- Common status Component -->
-    {% include 'zoho/expense/components/filter.html' %}
+    {% include 'tally/expense/components/filter.html' %}
     <!-- [ Main Content ] start -->
     <div class="row">
         <div class="col-sm-12">
@@ -26,7 +26,7 @@
                     <div class="d-sm-flex align-items-center justify-content-between">
                         <h5 class="mb-3 mb-sm-0">Expense Bills</h5>
                         <div>
-                            <a href="{% url 'zoho:expense_bill_create' team.slug %}" class="btn btn-primary">
+                            <a href="{% url 'tally:expense_bill_create' team.slug %}" class="btn btn-primary">
                                 Upload
                             </a>
                         </div>
@@ -61,7 +61,7 @@
 
                                     <td>{{ bill.created_at }}</td>
                                     <td>
-                                        {% include 'zoho/expense/components/table_actions.html' %}
+                                        {% include 'tally/expense/components/table_actions.html' %}
                                     </td>
                                 </tr>
                             {% endfor %}

@@ -47,7 +47,7 @@
                     <div class="d-sm-flex align-items-center justify-content-between">
                         <h5 class="mb-3 mb-sm-0">Bill Verification</h5>
                         <div>
-                            <a href="{% url 'zoho:expense_bill_list' team.slug %}" class="btn btn-primary">
+                            <a href="{% url 'tally:expense_bill_list' team.slug %}" class="btn btn-primary">
                                 Back
                             </a>
                         </div>
@@ -116,14 +116,13 @@
                         <!-- Products -->
                         {{ formset.management_form }}
                         <div class="row mt-2 table-responsive">
-                            <table class="table table-sm">
+                            <table class="table table-nowrap dt-responsive nowrap w-80">
                                 <thead>
                                 <tr>
                                     <th>S.No.</th>
                                     <th>Item</th>
-                                    <th>Chart of Accounts</th>
-                                    <th>Select Vendor</th>
                                     <th>Select Mode</th>
+                                    <th>Chart of Accounts</th>
                                     <th>Amount</th>
                                 </tr>
                                 </thead>
@@ -138,12 +137,12 @@
                                         <td hidden="hidden">{{ form.id }}</td>
                                         <td>{% render_field form.item_details class="form-control" rows='1' %}</td>
                                         <td>
-                                            {% render_field form.chart_of_accounts class="js-example-basic-single" %}
-                                        </td>
-                                        <td>{% render_field form.vendor class="js-example-basic-single" %}</td>
-                                        <td>
                                             {% render_field form.debit_or_credit class="form-select" %}
                                         </td>
+                                        <td>
+                                            {% render_field form.chart_of_accounts class="js-example-basic-single" %}
+                                        </td>
+
                                         <td>{% render_field form.amount class="form-control" %}</td>
                                     </tr>
                                 {% endfor %}
@@ -217,121 +216,7 @@
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 
     <script src="{% static 'assets/js/pages/select2.init.js' %}"></script>
-    <script>
-        $(document).ready(function () {
-            // Get references to the vendor and GST elements
-            let $vendorSelect = $('#{{ bill_form.vendor.id_for_label }}');
-            let $gstField = $('#gst_field'); // Replace 'gst_field' with the actual ID or class of your GST field
 
-            // Define a function to update the GST field based on the selected vendor
-            function updateGST() {
-                let selectedVendorId = $vendorSelect.val();
-
-                // Make an AJAX request to fetch the GST information for the selected vendor
-                $.ajax({
-                    url: '{% url 'zoho:fetchVendorGst' team.slug %}', // Replace with the actual URL to fetch GST information
-                    method: 'GET',
-                    data: {vendor_id: selectedVendorId},
-                    success: function (data) {
-                        let gstField = $('#gst_field');
-                        gstField.text('GST: ' + data.gst);
-                    },
-                    error: function () {
-                        // Handle errors if the request fails
-                        $gstField.text('N/A'); // Display 'N/A' or any default value
-                    }
-                });
-            }
-
-            // Attach an event listener to the vendor selection field
-            $vendorSelect.on('change', function () {
-                updateGST();
-            });
-
-            // Call the updateGST function initially only if a vendor is selected
-            if ($vendorSelect.val() !== null && $vendorSelect.val() !== '') {
-                updateGST();
-            }
-        });
-    </script>
-    <!-- Script to Fetch Tax Data and Update Dropdown, with Django URL -->
-    <script type="text/javascript">
-        document.addEventListener('DOMContentLoaded', function () {
-            let fetchTaxDataURL = "{% url 'zoho:fetch_tax_data' team.slug %}";
-            let isTax = "{{ bill_form.is_tax.value }}";
-
-            // Function to toggle the display of the tax data dropdown
-            function toggleTaxDataDropdown(show) {
-                document.getElementById('taxValueColumn').style.display = show ? 'block' : 'none';
-            }
-
-            // Function to fetch and populate the tax data dropdown
-            function fetchAndPopulateTaxData(taxType) {
-                const dropdown = document.getElementById('taxValueId');
-                // Clear existing options
-                while (dropdown.options.length > 0) {
-                    dropdown.remove(0);
-                }
-
-                // Only fetch data if taxType is 'TDS' or 'TCS'
-                if (taxType === 'TDS' || taxType === 'TCS') {
-                    // Fetch tax data from the server
-                    fetch(`${fetchTaxDataURL}?tax_type=${taxType}`)
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data && data.length > 0) {
-                                // Populate dropdown with new options
-                                data.forEach(item => {
-                                    const option = new Option(`${item.taxName} (${item.taxPercentage}%)`, item.id);
-                                    dropdown.add(option);
-                                });
-                            } else {
-                                // Handle case when no data is returned
-                                const option = new Option('No data available', '');
-                                dropdown.add(option);
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Error fetching tax data:', error);
-                            const option = new Option('Error loading data', '');
-                            dropdown.add(option);
-                        });
-                }
-            }
-
-            // Set the initial state based on the server-side value
-            switch (isTax) {
-                case "TDS":
-                    document.getElementById('tds').checked = true;
-                    toggleTaxDataDropdown(true);
-                    fetchAndPopulateTaxData('TDS');
-                    break;
-                case "TCS":
-                    document.getElementById('tcs').checked = true;
-                    toggleTaxDataDropdown(true);
-                    fetchAndPopulateTaxData('TCS');
-                    break;
-                default:
-                    // This covers "None" and any other unexpected value
-                    document.getElementById('none').checked = true;
-                    toggleTaxDataDropdown(false);
-                    break;
-            }
-
-            // Attach event listeners to the radio buttons to handle changes
-            document.querySelectorAll('input[name="tax_type"]').forEach(radio => {
-                radio.addEventListener('change', function () {
-                    if (this.value === "TDS" || this.value === "TCS") {
-                        toggleTaxDataDropdown(true);
-                        fetchAndPopulateTaxData(this.value);
-                    } else {
-                        // "None" or other selections hide the dropdown
-                        toggleTaxDataDropdown(false);
-                    }
-                });
-            });
-        });
-    </script>
 
 {% endblock %}
 

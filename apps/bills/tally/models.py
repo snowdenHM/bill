@@ -227,6 +227,7 @@ class TallyExpenseAnalyzedProduct(BaseTeamModel):
     id = models.UUIDField(default=uuid.uuid4, unique=True, primary_key=True, editable=False)
     expense_bill = models.ForeignKey(TallyExpenseAnalyzedBill, related_name='products', on_delete=models.CASCADE)
     item_details = models.CharField(max_length=200, null=True, blank=True)
+    chart_of_accounts = models.ForeignKey(Ledger, on_delete=models.CASCADE, null=True, blank=True)
     amount = models.CharField(max_length=10, null=True, blank=True)
     debit_or_credit = models.CharField(max_length=10, null=True, blank=True, default='credit')
     created_at = models.DateTimeField(auto_now_add=True)

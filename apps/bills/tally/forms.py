@@ -2,7 +2,7 @@ from django import forms
 from django.forms import modelformset_factory, Textarea
 from django.forms import BaseModelFormSet
 from apps.bills.tally.models import TallyVendorBill, TallyVendorAnalyzedProduct, TallyVendorAnalyzedBill, Ledger, \
-    ParentLedger
+    ParentLedger, TallyExpenseBill, TallyExpenseAnalyzedBill, TallyExpenseAnalyzedProduct
 
 
 class TallyVendorBillForm(forms.ModelForm):
@@ -75,5 +75,70 @@ TallyVendorProductFormSet = forms.modelformset_factory(
     TallyVendorAnalyzedProduct,
     form=TallyVendorAnalyzedProductForm,
     formset=BaseTallyVendorProductFormSet,
+    extra=0,
+)
+
+
+class ExpenseBillForm(forms.ModelForm):
+    """
+    Form for creating and updating Expense Bills.
+    """
+
+    class Meta:
+        model = TallyExpenseBill
+        fields = ['file', 'fileType']
+
+
+class ExpenseAnalyzedBillForm(forms.ModelForm):
+    """
+    Form for reviewing and verifying analyzed Expense Bills.
+    """
+
+    class Meta:
+        model = TallyExpenseAnalyzedBill
+        fields = ['selectBill', 'voucher', 'bill_no', 'bill_date', 'total', 'igst', 'cgst', 'sgst', 'note']
+
+
+class ExpenseAnalyzedProductForm(forms.ModelForm):
+    """
+    Form for managing products in analyzed expense bills.
+    """
+    item_details = forms.CharField(widget=Textarea(attrs={'class': 'form-control'}))
+
+    def __init__(self, *args, **kwargs):
+        team = kwargs.pop('team', None)
+        super().__init__(*args, **kwargs)
+        try:
+            expense = ParentLedger.objects.get(parent="Input Tax Credit", team=team)
+            self.fields['chart_of_accounts'].queryset = Ledger.objects.filter(parent=expense)
+        except ParentLedger.DoesNotExist:
+            self.fields['chart_of_accounts'].queryset = Ledger.objects.none()
+        print(ParentLedger.objects.get(parent="Indirect Expenses", team=team))
+
+    class Meta:
+        model = TallyExpenseAnalyzedProduct
+        fields = ['item_details', 'chart_of_accounts', 'amount', 'debit_or_credit']
+
+
+# ✅
+class BaseTallyExpenseProductFormSet(BaseModelFormSet):
+    """
+    Custom formset to pass 'team' parameter to each form.
+    """
+
+    def __init__(self, *args, **kwargs):
+        self.team = kwargs.pop('team', None)
+        super().__init__(*args, **kwargs)
+
+    def get_form_kwargs(self, index):
+        kwargs = super().get_form_kwargs(index)
+        kwargs.update({'team': self.team})
+        return kwargs
+
+
+ExpenseProductFormSet = forms.modelformset_factory(
+    TallyExpenseAnalyzedProduct,
+    form=ExpenseAnalyzedProductForm,
+    formset=BaseTallyExpenseProductFormSet,
     extra=0,
 )

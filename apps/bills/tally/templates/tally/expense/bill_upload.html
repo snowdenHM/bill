@@ -23,14 +23,14 @@
                     <div class="d-sm-flex align-items-center justify-content-between">
                         <h5 class="mb-3 mb-sm-0">Bill Upload</h5>
                         <div>
-                            <a href="{% url 'zoho:expense_bill_list' team.slug %}" class="btn btn-primary">
+                            <a href="{% url 'tally:expense_bill_list' team.slug %}" class="btn btn-primary">
                                Back
                             </a>
                         </div>
                     </div>
                 </div>
                 <div class="card-body">
-                    <form method="post" action="{% url 'zoho:expense_bill_create' team.slug %}"
+                    <form method="post" action="{% url 'tally:expense_bill_create' team.slug %}"
                           enctype="multipart/form-data">
                         {% csrf_token %}
                         <div class="row m-2">

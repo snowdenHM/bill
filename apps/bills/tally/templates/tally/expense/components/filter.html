@@ -1,12 +1,12 @@
 <div class="row">
     <div class="d-sm-flex align-items-center justify-content-start m-2 gap-3">
-        <a href="{% url 'zoho:expense_bill_drafts' team.slug %}" class="btn btn-warning btn-sm mx-2">
+        <a href="{% url 'tally:expense_bill_drafts' team.slug %}" class="btn btn-warning btn-sm mx-2">
             Drafts
         </a>
-        <a href="{% url 'zoho:expense_bill_analyzed' team.slug %}" class="btn btn-primary btn-sm mx-2">
+        <a href="{% url 'tally:expense_bill_analyzed' team.slug %}" class="btn btn-primary btn-sm mx-2">
             Analyzed
         </a>
-        <a href="{% url 'zoho:expense_bill_synced' team.slug %}" class="btn btn-success btn-sm mx-2">
+        <a href="{% url 'tally:expense_bill_synced' team.slug %}" class="btn btn-success btn-sm mx-2">
             Synced
         </a>
     </div>
