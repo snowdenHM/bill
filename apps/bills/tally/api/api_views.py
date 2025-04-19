@@ -87,141 +87,167 @@ class MasterAPIView(APIView):
 
 class TallyExpenseApi(APIView):
     """
-    API View that handles both POST (to receive payload) and GET (to retrieve all synced data with products) requests.
+    API View that handles both POST (to receive payload) and GET (to retrieve all synced data with products).
     """
     permission_classes = [AllowAny]
 
     def get(self, request, team_slug, *args, **kwargs):
+        """
+        Retrieve all synced expense bills with related products.
+        """
         try:
-            # Filter TallyExpense instances where the associated TallyExpenseBill status is 'Synced'
-            expenses = TallyExpense.objects.filter(selectBill__status='Synced', team__slug=team_slug)
-            data = []
-            for expense in expenses:
-                # Ensure selectBill is available and has status 'Synced'
-                if not expense.selectBill:
-                    print(f"Missing selectBill for expense ID {expense.id}")
-                    continue
-                # Fetch related products for each TallyExpense
-                products = expense.products.all()
-                products_data = [{
-                    "id": product.id,
-                    "item_details": product.item_details,
-                    "amount": product.amount,
-                    "debit_or_credit": product.debit_or_credit,
-                    "created_at": product.created_at
-                } for product in products]
-                # Add expense details with associated products
-                data.append({
-                    "id": expense.id,
-                    "voucher": expense.voucher,
-                    "voucher_number": expense.voucher_number,
-                    "bill_no": expense.bill_no,
-                    "bill_date": expense.bill_date,
-                    "total": expense.total,
-                    "company": expense.company,
-                    "note": expense.note,
-                    "created_at": expense.created_at,
-                    "products": products_data
-                })
-            response_payload = {
-                "data": data
-            }
-            return Response(response_payload, status=status.HTTP_200_OK)
+            # Get all expenses where the associated TallyExpenseBill status is 'Synced'
+            expenses = TallyExpenseAnalyzedBill.objects.filter(
+                selectBill__status='Synced', selectBill__team__slug=team_slug
+            ).select_related('vendor', 'selectBill')
 
-        except AttributeError as e:
-            # Print specific error for debugging
-            print(f"AttributeError: {e}")
-            return Response({"error": "An attribute error occurred. Please check your data structure."},
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            data = [
+                {
+                    "id": expense.id,
+                    "voucher": expense.voucher or "N/A",
+                    "bill_no": expense.bill_no or "N/A",
+                    "bill_date": expense.bill_date.strftime('%Y-%m-%d') if expense.bill_date else None,
+                    "total": float(expense.total) if expense.total else 0.0,
+                    "vendor": {
+                        "name": expense.vendor.name if expense.vendor else "No Vendor",
+                        "company": expense.vendor.company if expense.vendor else "No Company",
+                        "gst_in": expense.vendor.gst_in if expense.vendor else "No GST",
+                    },
+                    "taxes": {
+                        "igst": {
+                            "amount": float(expense.igst) if expense.igst else 0.0,
+                            "ledger": str(expense.igst_taxes) if expense.igst_taxes else "No Tax Ledger",
+                        },
+                        "cgst": {
+                            "amount": float(expense.cgst) if expense.cgst else 0.0,
+                            "ledger": str(expense.cgst_taxes) if expense.cgst_taxes else "No Tax Ledger",
+                        },
+                        "sgst": {
+                            "amount": float(expense.sgst) if expense.sgst else 0.0,
+                            "ledger": str(expense.sgst_taxes) if expense.sgst_taxes else "No Tax Ledger",
+                        }
+                    },
+                    "note": expense.note or "No Notes",
+                    "products": [
+                        {
+                            "id": product.id,
+                            "item_details": product.item_details or "N/A",
+                            "chart_of_accounts": str(
+                                product.chart_of_accounts.name) if product.chart_of_accounts else "No Chart",
+                            "amount": float(product.amount) if product.amount else 0.0,
+                            "debit_or_credit": product.debit_or_credit or "credit",
+                        }
+                        for product in expense.products.all()
+                    ],
+                    "created_at": expense.created_at.strftime('%Y-%m-%d %H:%M:%S') if expense.created_at else None,
+                }
+                for expense in expenses
+            ]
+
+            return Response({"data": data}, status=status.HTTP_200_OK)
+
         except Exception as e:
-            # Catch-all for other errors
-            print(f"Error: {e}")
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def post(self, request, team_slug, *args, **kwargs):
+        """
+        Receives and validates incoming expense bill data.
+        """
         try:
             payload = request.data
             print(f"Received Payload for team '{team_slug}':", payload)
 
-            if not payload.get("voucher") or not payload.get("voucher_number"):
-                return Response({"message": "Missing required fields: voucher or voucher_number"},
+            # Validate that the required fields exist
+            bill_details = payload.get("bill_details", {})
+            if not bill_details.get("voucher"):
+                return Response({"message": "Missing required field: voucher"},
                                 status=status.HTTP_400_BAD_REQUEST)
 
-            print(f"Team Slug: {team_slug}")
+            # Extract bill details
+            bill_data = {
+                "bill_id": payload.get("bill_id", ""),
+                "reference_number": bill_details.get("reference_number", "N/A"),
+                "bill_date": bill_details.get("bill_date", None),
+                "voucher": bill_details.get("voucher", "N/A"),
+                "total_amount": float(bill_details.get("total_amount", 0.0)),
+                "company_id": bill_details.get("company_id", ""),
+                "vendor": payload.get("vendor", {}),
+                "taxes": payload.get("taxes", {}),
+                "notes": payload.get("notes", "No Notes"),
+                "line_items": payload.get("line_items", []),
+            }
+
             return Response({"message": "Payload received successfully"}, status=status.HTTP_200_OK)
 
         except Exception as e:
-            print(f"Error occurred: {e}")
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class TallyVendor(APIView):
     """
-    API View that handles both POST (to receive payload) and GET (to retrieve all synced data with products) requests.
+    API View that handles both POST (to receive payload) and GET (to retrieve all synced data with products).
     """
     permission_classes = [AllowAny]
 
     def get(self, request, team_slug, *args, **kwargs):
+        """
+        Retrieve all synced bills with related product transactions.
+        """
         try:
-            # Filter invoices where the associated TallyVendorBill status is 'Synced'
-            vendors = Invoice.objects.filter(selectBill__status='Synced', selectBill__team__slug=team_slug)
-            data = []
-            for vendor in vendors:
-                # Ensure selectBill is available and has status 'Synced'
-                if not vendor.selectBill:
-                    print(f"Missing selectBill for vendor ID {vendor.id}")
-                    continue
-                # Fetch related product transactions for each Invoice
-                transactions = vendor.transactions.all()
-                transactions_data = [{
-                    "id": transaction.id,
-                    "item_name": transaction.item_name,
-                    "item_details": transaction.item_details,
-                    "price": transaction.price,
-                    "quantity": transaction.quantity,
-                    "amount": transaction.amount,
-                } for transaction in transactions]
-                # Add vendor details with associated products
-                data.append({
+            # Get all invoices where the associated TallyVendorBill status is 'Synced'
+            vendors = TallyVendorAnalyzedBill.objects.filter(
+                selectBill__status='Synced', selectBill__team__slug=team_slug
+            ).select_related('vendor', 'selectBill')
+
+            data = [
+                {
                     "id": vendor.id,
                     "bill_no": vendor.bill_no,
-                    "bill_date": vendor.bill_date,
-                    "total": vendor.total,
-                    "igst": vendor.igst,
-                    "cgst": vendor.cgst,
-                    "sgst": vendor.sgst,
-                    "vendor_company": vendor.vendor.company,
-                    "vendor_gst": vendor.vendor.gst_in,
-                    "customer_id": vendor.company_id,
-                    "transactions": transactions_data
-                })
-            response_payload = {
-                "data": data
-            }
-            return Response(response_payload, status=status.HTTP_200_OK)
+                    "bill_date": vendor.bill_date.strftime('%Y-%m-%d') if vendor.bill_date else None,
+                    "total": float(vendor.total),
+                    "igst": float(vendor.igst),
+                    "cgst": float(vendor.cgst),
+                    "sgst": float(vendor.sgst),
+                    "vendor": {
+                        "name": vendor.vendor.name if vendor.vendor else "No Vendor",
+                        "company": vendor.vendor.company if vendor.vendor else "No Company",
+                        "gst_in": vendor.vendor.gst_in if vendor.vendor else "No GST",
+                    },
+                    "customer_id": vendor.selectBill.team.id if vendor.selectBill.team else None,
+                    "transactions": [
+                        {
+                            "id": transaction.id,
+                            "item_name": transaction.item_name,
+                            "item_details": transaction.item_details,
+                            "price": float(transaction.price),
+                            "quantity": int(transaction.quantity),
+                            "amount": float(transaction.amount),
+                        }
+                        for transaction in vendor.products.all()
+                    ]
+                }
+                for vendor in vendors
+            ]
 
-        except AttributeError as e:
-            # Print specific error for debugging
-            print(f"AttributeError: {e}")
-            return Response({"error": "An attribute error occurred. Please check your data structure."},
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"data": data}, status=status.HTTP_200_OK)
+
         except Exception as e:
-            # Catch-all for other errors
-            print(f"Error: {e}")
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def post(self, request, team_slug, *args, **kwargs):
+        """
+        Receives and validates incoming bill data.
+        """
         try:
             payload = request.data
-            print(f"Received Payload for team '{team_slug}':", payload)
-
-            if not payload.get("bill_number") or not payload.get("company_id"):
-                return Response({"message": "Missing required fields: Bill No. or company"},
+            # print(f"Received Payload for team '{team_slug}':", payload)
+            # Ensure bill_number is present
+            if not payload.get("bill_details", {}).get("bill_number"):
+                return Response({"message": "Missing required field: bill_number"},
                                 status=status.HTTP_400_BAD_REQUEST)
 
-            print(f"Team Slug: {team_slug}")
+            # Additional data processing logic can go here...
             return Response({"message": "Payload received successfully"}, status=status.HTTP_200_OK)
 
         except Exception as e:
-            print(f"Error occurred: {e}")
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

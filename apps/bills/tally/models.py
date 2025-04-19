@@ -34,6 +34,31 @@ class Ledger(BaseTeamModel):
         verbose_name_plural = 'Ledgers'
 
 
+class TallyConfig(BaseTeamModel):
+    """
+    Stores user-defined configuration for which ParentLedger should be used for IGST, CGST, SGST, and Vendors.
+    """
+    id = models.UUIDField(default=uuid.uuid4, unique=True, primary_key=True, editable=False)
+    igst_parent = models.ForeignKey(ParentLedger, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name="igst_tally_config", verbose_name="IGST Parent Ledger")
+    cgst_parent = models.ForeignKey(ParentLedger, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name="cgst_tally_config", verbose_name="CGST Parent Ledger")
+    sgst_parent = models.ForeignKey(ParentLedger, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name="sgst_tally_config", verbose_name="SGST Parent Ledger")
+    vendor_parent = models.ForeignKey(ParentLedger, on_delete=models.SET_NULL, null=True, blank=True,
+                                      related_name="vendor_tally_config", verbose_name="Vendor Parent Ledger")
+    chart_of_accounts = models.ForeignKey(ParentLedger, on_delete=models.SET_NULL, null=True, blank=True,
+                                      related_name="coa_tally_config", verbose_name="COA Parent Ledger")
+    chart_of_accounts_expense = models.ForeignKey(ParentLedger, on_delete=models.SET_NULL, null=True, blank=True,
+                                          related_name="ex_coa_tally_config", verbose_name="EX COA Parent Ledger")
+
+    class Meta:
+        verbose_name_plural = "Tally Configurations"
+
+    def __str__(self):
+        return f"Tally Config for Team {self.team.name}"
+
+
 ##### File Validator
 def validate_file_extension(value):
     """
@@ -109,13 +134,20 @@ class TallyVendorAnalyzedBill(BaseTeamModel):
 
     id = models.UUIDField(default=uuid.uuid4, unique=True, primary_key=True, editable=False)
     selectBill = models.ForeignKey(TallyVendorBill, on_delete=models.CASCADE, null=True, blank=True)
-    vendor = models.ForeignKey(Ledger, on_delete=models.CASCADE, null=True, blank=True)
+    vendor = models.ForeignKey(Ledger, on_delete=models.CASCADE, null=True, blank=True,
+                               related_name="vendor_tally_vendor_analyzed_bills")
     bill_no = models.CharField(max_length=50, null=True, blank=True)
     bill_date = models.DateField(null=True, blank=True)
     total = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, default=0)
     igst = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, default=0)
+    igst_taxes = models.ForeignKey(Ledger, on_delete=models.CASCADE, null=True, blank=True,
+                                   related_name="igst_tally_vendor_analyzed_bills")
     cgst = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, default=0)
+    cgst_taxes = models.ForeignKey(Ledger, on_delete=models.CASCADE, null=True, blank=True,
+                                   related_name="cgst_tally_vendor_analyzed_bills")
     sgst = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, default=0)
+    sgst_taxes = models.ForeignKey(Ledger, on_delete=models.CASCADE, null=True, blank=True,
+                                   related_name="sgst_tally_vendor_analyzed_bills")
     note = models.TextField(null=True, blank=True, default="Enter Your Description")
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -204,32 +236,44 @@ class TallyExpenseBill(BaseTeamModel):
 class TallyExpenseAnalyzedBill(BaseTeamModel):
     id = models.UUIDField(default=uuid.uuid4, unique=True, primary_key=True, editable=False)
     selectBill = models.ForeignKey(TallyExpenseBill, on_delete=models.CASCADE, null=True, blank=True)
-    voucher = models.CharField(max_length=255)
-    voucher_number = models.CharField(max_length=255)
+    vendor = models.ForeignKey(Ledger, on_delete=models.CASCADE, null=True, blank=True,
+                               related_name="vendor_tally_expense_analyzed_bills")
+    voucher = models.CharField(max_length=255, null=True, blank=True)
     bill_no = models.CharField(max_length=50, null=True, blank=True)
     bill_date = models.DateField(null=True, blank=True)
     total = models.CharField(max_length=50, null=True, blank=True, default=0)
-    igst = models.CharField(max_length=50, null=True, blank=True, default=0)
-    cgst = models.CharField(max_length=50, null=True, blank=True, default=0)
-    sgst = models.CharField(max_length=50, null=True, blank=True, default=0)
+    igst = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, default=0)
+    igst_taxes = models.ForeignKey(Ledger, on_delete=models.CASCADE, null=True, blank=True,
+                                   related_name="igst_tally_expense_analyzed_bills")
+    cgst = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, default=0)
+    cgst_taxes = models.ForeignKey(Ledger, on_delete=models.CASCADE, null=True, blank=True,
+                                   related_name="cgst_tally_expense_analyzed_bills")
+    sgst = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, default=0)
+    sgst_taxes = models.ForeignKey(Ledger, on_delete=models.CASCADE, null=True, blank=True,
+                                   related_name="sgst_tally_expense_analyzed_bills")
     note = models.CharField(max_length=100, null=True, blank=True, default="Enter Your Description")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        verbose_name_plural = "Expense Analysed Bill"
+        verbose_name_plural = "Expense Analyzed Bill"
 
     def __str__(self):
-        return self.selectBill.billmunshiName
+        return self.selectBill.billmunshiName if self.selectBill else "Unnamed Bill"
 
 
 #### Expense Journal Analyzed Product
 class TallyExpenseAnalyzedProduct(BaseTeamModel):
+    EXPENSE_TYPE_CHOICES = (
+        ('credit', 'Credit'),
+        ('debit', 'Debit'),
+    )
     id = models.UUIDField(default=uuid.uuid4, unique=True, primary_key=True, editable=False)
     expense_bill = models.ForeignKey(TallyExpenseAnalyzedBill, related_name='products', on_delete=models.CASCADE)
     item_details = models.CharField(max_length=200, null=True, blank=True)
     chart_of_accounts = models.ForeignKey(Ledger, on_delete=models.CASCADE, null=True, blank=True)
     amount = models.CharField(max_length=10, null=True, blank=True)
-    debit_or_credit = models.CharField(max_length=10, null=True, blank=True, default='credit')
+    debit_or_credit = models.CharField(choices=EXPENSE_TYPE_CHOICES, max_length=10, null=True, blank=True,
+                                       default='credit')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

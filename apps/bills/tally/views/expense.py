@@ -302,25 +302,6 @@ def expense_bill_analysis_process(request, team_slug, bill_id):
                 )
             )
 
-        # Add default CGST and SGST products
-        product_instances.append(
-            TallyExpenseAnalyzedProduct(
-                expense_bill=analyzed_bill,
-                item_details="CGST",
-                amount=str(float(relevant_data.get('cgst', 0) or 0)),
-                team=request.team
-            )
-        )
-
-        product_instances.append(
-            TallyExpenseAnalyzedProduct(
-                expense_bill=analyzed_bill,
-                item_details="SGST",
-                amount=str(float(relevant_data.get('sgst', 0) or 0)),
-                team=request.team
-            )
-        )
-
         TallyExpenseAnalyzedProduct.objects.bulk_create(product_instances)
 
         # Update bill status
@@ -342,7 +323,7 @@ def expense_bill_analysis_process(request, team_slug, bill_id):
     return redirect('tally:expense_bill_list', team_slug=team_slug)
 
 
-# ✅Verify Expense Bill
+# ✅ Verify Expense Bill
 @login_and_team_required(login_url='account_login')
 def expense_bill_verification_process(request, team_slug, bill_id):
     """
@@ -351,25 +332,26 @@ def expense_bill_verification_process(request, team_slug, bill_id):
     detailBill = get_object_or_404(TallyExpenseBill, id=bill_id)
     analysed_bill = get_object_or_404(TallyExpenseAnalyzedBill, selectBill=detailBill)
     analysed_products = TallyExpenseAnalyzedProduct.objects.filter(expense_bill=analysed_bill).all()
+
     if request.method == 'POST':
-        bill_form = ExpenseAnalyzedBillForm(request.POST, instance=analysed_bill)
-        formset = ExpenseProductFormSet(request.POST, queryset=analysed_products)
+        bill_form = ExpenseAnalyzedBillForm(request.POST, instance=analysed_bill, team=request.team)  # ✅ Pass team
+        formset = ExpenseProductFormSet(request.POST, queryset=analysed_products, team=request.team)  # ✅ Pass team
+
         if bill_form.is_valid() and formset.is_valid():
             analysed_bill = bill_form.save(commit=False)
             analysed_bill.selectBill = detailBill
             analysed_bill.team = request.team
             analysed_bill.save()
+
             for form in formset:
-                # Check if the form has data in the required fields before saving
                 if form.cleaned_data.get('item_details'):
                     formset_data = form.save(commit=False)
-                    formset_data.expense_analyzed_bill = analysed_bill
+                    formset_data.expense_bill = analysed_bill  # ✅ Correct foreign key reference
                     formset_data.team = request.team
                     formset_data.save()
-                else:
-                    # If the form is empty or has default values, don't save it
-                    if form.instance.pk:  # If it has an ID, it's already saved, so delete it
-                        form.instance.delete()
+                elif form.instance.pk:  # If the form instance exists but has no valid data, delete it
+                    form.instance.delete()
+
             detailBill.status = "Verified"
             detailBill.save()
             return redirect('tally:expense_bill_analyzed', team_slug=team_slug)
@@ -378,11 +360,18 @@ def expense_bill_verification_process(request, team_slug, bill_id):
             print("Formset Error:", formset.errors)
             messages.warning(request, 'Server Error! Contact Service Provider')
             return redirect('tally:expense_bill_analyzed', team_slug=team_slug)
+
     else:
-        bill_form = ExpenseAnalyzedBillForm(instance=analysed_bill)
+        bill_form = ExpenseAnalyzedBillForm(instance=analysed_bill, team=request.team)
         formset = ExpenseProductFormSet(queryset=analysed_products, team=request.team)
-    context = {'detailBill': detailBill, 'bill_form': bill_form, 'formset': formset,
-               'analysed_products': analysed_products, "heading": "Bill Verification"}
+
+    context = {
+        'detailBill': detailBill,
+        'bill_form': bill_form,
+        'formset': formset,
+        'analysed_products': analysed_products,
+        "heading": "Bill Verification"
+    }
     return render(request, 'tally/expense/verify_bill.html', context)
 
 
@@ -390,53 +379,81 @@ def expense_bill_verification_process(request, team_slug, bill_id):
 @login_and_team_required(login_url='account_login')
 def expense_bill_sync_process(request, team_slug, bill_id):
     """
-    Marks an expense bill as synced with tally.
+    Syncs an expense bill with Tally.
     """
     try:
-        billSyncProcess = TallyExpenseAnalyzedBill.objects.get(selectBill=bill_id)
-        tally_products = billSyncProcess.products.all()
-        vendortallyId = tallyVendor.objects.get(id=billSyncProcess.vendor_id)
-        bill_date_str = billSyncProcess.bill_date.strftime('%Y-%m-%d')  # Convert date to yyyy-mm-dd string
+        # Fetch the bill details
+        billSyncProcess = get_object_or_404(TallyExpenseAnalyzedBill, selectBill=bill_id)
+        tally_products = billSyncProcess.products.all()  # ✅ Using related_name='products'
 
+        # Fetch vendor details (Handle missing vendor scenario)
+        vendor_ledger = billSyncProcess.vendor
+        vendor_details = {
+            "name": vendor_ledger.name if vendor_ledger else "No Vendor",
+            "company": vendor_ledger.company if vendor_ledger else "No Company",
+            "gst_in": vendor_ledger.gst_in if vendor_ledger else "No GST",
+        }
+
+        # Construct the payload
         bill_data = {
-            "reference_number": billSyncProcess.bill_no,
-            "journal_date": bill_date_str,
-            "notes": billSyncProcess.note,
-            "line_items": []
+            "bill_id": str(billSyncProcess.id),
+            "bill_details": {
+                "reference_number": billSyncProcess.bill_no or "N/A",
+                "bill_date": billSyncProcess.bill_date.strftime('%Y-%m-%d') if billSyncProcess.bill_date else None,
+                "voucher": billSyncProcess.voucher or "N/A",
+                "total_amount": float(billSyncProcess.total) if billSyncProcess.total else 0.0,
+                "company_id": team_slug,
+            },
+            "vendor": vendor_details,
+            "taxes": {
+                "igst": {
+                    "amount": float(billSyncProcess.igst) if billSyncProcess.igst else 0.0,
+                    "ledger": str(billSyncProcess.igst_taxes) if billSyncProcess.igst_taxes else "No Tax Ledger",
+                    "debit_or_credit": "debit"
+                },
+                "cgst": {
+                    "amount": float(billSyncProcess.cgst) if billSyncProcess.cgst else 0.0,
+                    "ledger": str(billSyncProcess.cgst_taxes) if billSyncProcess.cgst_taxes else "No Tax Ledger",
+                    "debit_or_credit": "debit"
+                },
+                "sgst": {
+                    "amount": float(billSyncProcess.sgst) if billSyncProcess.sgst else 0.0,
+                    "ledger": str(billSyncProcess.sgst_taxes) if billSyncProcess.sgst_taxes else "No Tax Ledger",
+                    "debit_or_credit": "debit"
+                }
+            },
+            "notes": billSyncProcess.note or "No Notes",
+            "line_items": [
+                {
+                    "item_details": item.item_details or "N/A",
+                    "chart_of_accounts": str(item.chart_of_accounts.name) if item.chart_of_accounts else "No Chart",
+                    "amount": float(item.amount) if item.amount else 0.0,
+                    "debit_or_credit": item.debit_or_credit or "credit",
+                }
+                for item in tally_products
+            ]
         }
 
-        for item in tally_products:
-            line_item = {
-                "description": item.item_details,
-                "account_id": str(tallyChartOfAccount.objects.get(accountName=item.chart_of_accounts).accountId),
-                "customer_id": str(tallyVendor.objects.get(companyName=item.vendor).contactId),
-                "amount": float(item.amount),
-                "debit_or_credit": item.debit_or_credit
-            }
-            bill_data["line_items"].append(line_item)
+        # Debugging - Print the JSON payload before sending it
+        print(json.dumps(bill_data, indent=2))
 
-        currentToken = tallyCredentials.objects.get(team=request.team)
-        url = f"https://www.tallyapis.in/books/v3/journals?organization_id={currentToken.organisationId}"
-        payload = json.dumps(bill_data)
-        headers = {
-            'Authorization': f'tally-oauthtoken {currentToken.accessToken}',
-        }
-        response = requests.post(url, headers=headers, data=payload)
-        if response.status_code == 401:
-            new_access_token = refresh_tally_access_token(currentToken)
-            if new_access_token:
-                headers['Authorization'] = f'tally-oauthtoken {new_access_token}'
-                response = requests.post(url, headers=headers, data=payload)
+        # API URL for syncing data
+        api_url = f'{settings.SERVER_URL}/a/{team_slug}/bills/tally/api/v1/expense/'
 
-        if response.status_code == 201:
-            billStatusUpdate = ExpenseBill.objects.get(id=bill_id)
+        # Send the POST request to Tally API
+        response = requests.post(api_url, json=bill_data)
+
+        if response.status_code == 200:
+            # Update bill status to "Synced"
+            billStatusUpdate = get_object_or_404(TallyExpenseBill, id=bill_id)
             billStatusUpdate.status = "Synced"
             billStatusUpdate.save()
-            messages.success(request, "Bill Synced Successfully")
+
+            messages.success(request, "Expense Bill synced successfully with Tally.")
             return redirect('tally:expense_bill_synced', team_slug=team_slug)
         else:
             response_json = response.json()
-            error_message = response_json.get("message", "Failed to send data to tally")
+            error_message = response_json.get("message", "Failed to send data to Tally")
             messages.error(request, error_message)
             return redirect('tally:expense_bill_analyzed', team_slug=team_slug)
 
@@ -453,9 +470,9 @@ def expense_bill_sync_process(request, team_slug, bill_id):
 def expense_synced_bill_detail(request, team_slug, bill_id):
     detailBill = get_object_or_404(TallyExpenseBill, id=bill_id)
     analysed_bill = get_object_or_404(TallyExpenseAnalyzedBill, selectBill=detailBill)
-    analysed_products = TallyExpenseAnalyzedProduct.objects.filter(expense_analyzed_bill=analysed_bill).all()
-    bill_form = ExpenseAnalyzedBillForm(instance=analysed_bill)
-    formset = ExpenseProductFormSet(queryset=ExpenseAnalyzedProduct.objects.filter(expense_analyzed_bill=analysed_bill))
+    analysed_products = TallyExpenseAnalyzedProduct.objects.filter(expense_bill=analysed_bill).all()
+    bill_form = ExpenseAnalyzedBillForm(instance=analysed_bill, team=request.team)
+    formset = ExpenseProductFormSet(queryset=analysed_products, team=request.team)
     context = {'detailBill': detailBill, 'bill_form': bill_form, 'formset': formset,
-               'analysed_products': analysed_products}
+               'analysed_products': analysed_products, "heading": "Bill Synced"}
     return render(request, 'tally/expense/synced_detail.html', context)

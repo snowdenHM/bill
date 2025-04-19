@@ -13,6 +13,7 @@ from django.contrib import messages
 from django.core.files.base import ContentFile
 from django.db.models.functions import Lower
 from django.db.models import Q
+from decimal import Decimal
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
 
@@ -296,12 +297,13 @@ def bill_analysis_process(request, team_slug, bill_id):
             VendorAnalyzedProduct(
                 vendor_bill_analyzed=analyzed_bill,
                 item_details=item.get('description', ''),
-                rate=item.get('price', 0),
-                quantity=item.get('quantity', 0),
-                amount=item.get('price', 0) * item.get('quantity', 0),
+                rate=Decimal(item.get('price', 0) or 0),
+                quantity=int(item.get('quantity', 0) or 0),
+                amount=Decimal((item.get('price', 0) or 0) * (item.get('quantity', 0) or 0)),
                 team=request.team
             ) for item in relevant_data.get('items', [])
         ]
+
         VendorAnalyzedProduct.objects.bulk_create(product_instances)
 
         # Update bill status

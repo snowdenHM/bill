@@ -1,6 +1,6 @@
 from django.contrib import admin
 from apps.bills.tally.models import ParentLedger, Ledger, TallyVendorBill, TallyVendorAnalyzedProduct, \
-    TallyVendorAnalyzedBill, TallyExpenseBill, TallyExpenseAnalyzedBill, TallyExpenseAnalyzedProduct
+    TallyVendorAnalyzedBill, TallyExpenseBill, TallyExpenseAnalyzedBill, TallyExpenseAnalyzedProduct, TallyConfig
 
 # Register your models here.
 
@@ -13,3 +13,4 @@ admin.site.register(TallyVendorAnalyzedBill)
 admin.site.register(TallyExpenseBill)
 admin.site.register(TallyExpenseAnalyzedBill)
 admin.site.register(TallyExpenseAnalyzedProduct)
+admin.site.register(TallyConfig)

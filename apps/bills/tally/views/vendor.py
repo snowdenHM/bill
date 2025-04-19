@@ -347,6 +347,9 @@ def bill_verification_process(request, team_slug, bill_id):
         analysed_bill.cgst = request.POST.get('cgst')
         analysed_bill.sgst = request.POST.get('sgst')
         analysed_bill.igst = request.POST.get('igst')
+        analysed_bill.igst_taxes = Ledger.objects.get(id=request.POST.get('igst_taxes'))
+        analysed_bill.cgst_taxes = Ledger.objects.get(id=request.POST.get('cgst_taxes'))
+        analysed_bill.sgst_taxes = Ledger.objects.get(id=request.POST.get('sgst_taxes'))
         for index, product in enumerate(analysed_products):
             taxes_key = f"form-{index}-taxes"
             taxes_id = request.POST.get(taxes_key)
@@ -381,52 +384,65 @@ def bill_sync_process(request, team_slug, bill_id):
     Marks a bill as synced with Tally.
     """
     try:
-        analysed_bill = TallyVendorAnalyzedBill.objects.get(selectBill=bill_id)
+        analysed_bill = get_object_or_404(TallyVendorAnalyzedBill, selectBill=bill_id)
         analysed_bill_products = analysed_bill.products.all()
 
-        # Try to get the vendor ledger, and if not found, set it to None
-        tally_ledger = Ledger.objects.filter(id=analysed_bill.vendor_id).first()
+        # Fetch vendor ledger details
+        vendor_ledger = Ledger.objects.filter(id=analysed_bill.vendor_id).first()
 
-        # Set "No Ledger" if vendorTally is None
-        tally_ledger_id = tally_ledger if tally_ledger else None
+        # Convert bill date to string format (yyyy-mm-dd)
+        bill_date_str = analysed_bill.bill_date.strftime('%Y-%m-%d') if analysed_bill.bill_date else None
 
-        bill_date_str = analysed_bill.bill_date.strftime('%Y-%m-%d')  # Convert date to yyyy-mm-dd string
+        # Build the payload
         bill_data = {
-            "vendor_master_id": tally_ledger_id.master_id if tally_ledger_id else "No Ledger",
-            "vendor_name": tally_ledger_id.name if tally_ledger_id else "No Ledger",
-            "vendor_gst_in": tally_ledger_id.gst_in if tally_ledger_id else "No Ledger",
-            "vendor_company": tally_ledger_id.company if tally_ledger_id else "No Ledger",
-            "bill_number": analysed_bill.bill_no,
-            "date": bill_date_str,
-            "total": float(analysed_bill.total),
-            "igst": float(analysed_bill.igst),
-            "cgst": float(analysed_bill.cgst),
-            "sgst": float(analysed_bill.sgst),
-            "company_id": team_slug,
-            "line_items": []
+            "vendor": {
+                "master_id": vendor_ledger.master_id if vendor_ledger else "No Ledger",
+                "name": vendor_ledger.name if vendor_ledger else "No Ledger",
+                "gst_in": vendor_ledger.gst_in if vendor_ledger else "No Ledger",
+                "company": vendor_ledger.company if vendor_ledger else "No Ledger",
+            },
+            "bill_details": {
+                "bill_number": analysed_bill.bill_no,
+                "date": bill_date_str,
+                "total_amount": float(analysed_bill.total),
+                "company_id": team_slug,
+            },
+            "taxes": {
+                "igst": {
+                    "amount": float(analysed_bill.igst),
+                    "ledger": str(analysed_bill.igst_taxes) if analysed_bill.igst_taxes else "No Tax Ledger",
+                },
+                "cgst": {
+                    "amount": float(analysed_bill.cgst),
+                    "ledger": str(analysed_bill.cgst_taxes) if analysed_bill.cgst_taxes else "No Tax Ledger",
+                },
+                "sgst": {
+                    "amount": float(analysed_bill.sgst),
+                    "ledger": str(analysed_bill.sgst_taxes) if analysed_bill.sgst_taxes else "No Tax Ledger",
+                }
+            },
+            "line_items": [
+                {
+                    "item_name": item.item_name,
+                    "item_details": item.item_details,
+                    "tax_ledger": str(item.taxes) if item.taxes else "No Tax Ledger",
+                    "price": float(item.price),
+                    "quantity": int(item.quantity),
+                    "amount": float(item.amount),
+                }
+                for item in analysed_bill_products
+            ],
         }
 
-        for item in analysed_bill_products:
-            line_item = {
-                "item_name": item.item_name,
-                "item_details": item.item_details,
-                "taxes": str(item.taxes),
-                "price": str(item.price),
-                "quantity": str(item.quantity),
-                "amount": str(item.amount),
-            }
-            bill_data["line_items"].append(line_item)
-
-        print(json.dumps(bill_data, indent=4))
-        # payload = json.dumps(bill_data)
-        # Define the API endpoint URL where the payload should be sent
+        # API endpoint
         api_url = f'{settings.SERVER_URL}/a/{team_slug}/bills/tally/api/v1/vendor/'
-        # Send POST request to the API with the payload
+
+        # Send POST request
         response = requests.post(api_url, json=bill_data)
+
         if response.status_code == 200:
-            billStatusUpdate = TallyVendorBill.objects.get(id=bill_id)
-            billStatusUpdate.status = "Synced"
-            billStatusUpdate.save()
+            # Mark the bill as "Synced"
+            TallyVendorBill.objects.filter(id=bill_id).update(status="Synced")
             messages.success(request, "Bill synced successfully with Tally.")
             return redirect('tally:vendor_bill_synced', team_slug=team_slug)
         else:
@@ -434,9 +450,7 @@ def bill_sync_process(request, team_slug, bill_id):
             error_message = response_json.get("message", "Failed to send data to Tally")
             messages.error(request, error_message)
             return redirect('tally:vendor_bill_analyzed', team_slug=team_slug)
-    except TallyVendorAnalyzedBill.DoesNotExist:
-        messages.error(request, "Bill not found.")
-        return redirect('tally:vendor_bill_analyzed', team_slug=team_slug)
+
     except Exception as e:
         messages.error(request, f"An error occurred: {e}")
         return redirect('tally:vendor_bill_analyzed', team_slug=team_slug)
@@ -449,8 +463,7 @@ def synced_bill_detail(request, team_slug, bill_id):
     analysed_bill = get_object_or_404(TallyVendorAnalyzedBill, selectBill=detailBill)
     analysed_products = TallyVendorAnalyzedProduct.objects.filter(vendor_bill_analyzed=analysed_bill).all()
     bill_form = TallyVendorAnalyzedBillForm(instance=analysed_bill, team=request.team)
-    formset = TallyVendorProductFormSet(
-        queryset=TallyVendorAnalyzedProduct.objects.filter(vendor_bill_analyzed=analysed_bill), team=request.team)
+    formset = TallyVendorProductFormSet(queryset=analysed_products, team=request.team)
     context = {'detailBill': detailBill, 'bill_form': bill_form, 'formset': formset,
-               'analysed_products': analysed_products}
+               'analysed_products': analysed_products, "heading": "Bill Synced"}
     return render(request, 'tally/vendor/synced_detail.html', context)

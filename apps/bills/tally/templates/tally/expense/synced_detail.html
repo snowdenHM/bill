@@ -47,7 +47,7 @@
                     <div class="d-sm-flex align-items-center justify-content-between">
                         <h5 class="mb-3 mb-sm-0">Synced Bill</h5>
                         <div>
-                            <a href="{% url 'tally:vendor_bill_list' team.slug %}" class="btn btn-primary">
+                            <a href="{% url 'tally:expense_bill_list' team.slug %}" class="btn btn-primary">
                                 Back
                             </a>
                         </div>
@@ -84,7 +84,7 @@
                     <span class="text">Document ID: &nbsp;{{ detailBill.billmunshiName }}</span>
                 </div>
                 <div class="card-body">
-                     <form method="post" action="">
+                    <form method="post" action="">
                         {% csrf_token %}
                         <div class="row mt-2">
                             <div class="col-md-4">
@@ -122,7 +122,6 @@
                                     <th>S.No.</th>
                                     <th>Item</th>
                                     <th>Chart of Accounts</th>
-                                    <th>Select Vendor</th>
                                     <th>Select Mode</th>
                                     <th>Amount</th>
                                 </tr>
@@ -140,7 +139,6 @@
                                         <td>
                                             {% render_field form.chart_of_accounts class="js-example-basic-single" %}
                                         </td>
-                                        <td>{% render_field form.vendor class="js-example-basic-single" %}</td>
                                         <td>
                                             {% render_field form.debit_or_credit class="form-select" %}
                                         </td>
@@ -150,32 +148,58 @@
                                 </tbody>
                             </table>
                         </div>
-                        <!-- CGST/IGST/SGST -->
+                        <!-- IGST, CGST, SGST, and Total with Dropdown Selection -->
                         <div class="row m-2">
-                            <div class="col-md-3">
-                                <label for="{{ bill_form.csgt.id_for_label }}" class="form-label">CGST
+                            <!-- CGST -->
+                            <div class="col-md-6 d-flex align-items-center">
+                                <label for="{{ bill_form.cgst.id_for_label }}" class="form-label col-md-4">CGST
                                     (INR)</label>
-                                {% render_field bill_form.cgst class="form-control" %}
-                                {{ bill_form.cgst.errors }}
+                                <div class="col-md-4 m-1">
+                                    {% render_field bill_form.cgst class="form-control" %}
+                                    {{ bill_form.cgst.errors }}
+                                </div>
+                                <div class="col-md-4 m-1">
+                                    {% render_field bill_form.cgst_taxes class="form-select" %}
+                                    {{ bill_form.cgst_taxes.errors }}
+                                </div>
                             </div>
-                            <div class="col-md-3">
-                                <label for="{{ bill_form.sgst.id_for_label }}" class="form-label">SGST
+                            <!-- SGST -->
+                            <div class="col-md-6 d-flex align-items-center">
+                                <label for="{{ bill_form.sgst.id_for_label }}" class="form-label col-md-4">SGST
                                     (INR)</label>
-                                {% render_field bill_form.sgst class="form-control" %}
-                                {{ bill_form.sgst.errors }}
+                                <div class="col-md-4 m-1">
+                                    {% render_field bill_form.sgst class="form-control" %}
+                                    {{ bill_form.sgst.errors }}
+                                </div>
+                                <div class="col-md-4 m-1">
+                                    {% render_field bill_form.sgst_taxes class="form-select" %}
+                                    {{ bill_form.sgst_taxes.errors }}
+                                </div>
                             </div>
-                            <div class="col-md-3">
-                                <label for="{{ bill_form.igst.id_for_label }}" class="form-label">IGST
+                        </div>
+                        <div class="row m-2">
+                            <!-- IGST -->
+                            <div class="col-md-6 d-flex align-items-center">
+                                <label for="{{ bill_form.igst.id_for_label }}" class="form-label col-md-4">IGST
                                     (INR)</label>
-                                {% render_field bill_form.igst class="form-control" %}
-                                {{ bill_form.igst.errors }}
+                                <div class="col-md-4 m-1">
+                                    {% render_field bill_form.igst class="form-control" %}
+                                    {{ bill_form.igst.errors }}
+                                </div>
+                                <div class="col-md-4 m-1">
+                                    {% render_field bill_form.igst_taxes class="form-select" %}
+                                    {{ bill_form.igst_taxes.errors }}
+                                </div>
                             </div>
-                            <!-- Total of Bill -->
-                            <div class="col-md-3">
-                                <label for="{{ bill_form.total.id_for_label }}" class="form-label">Total
+
+                            <!-- Total -->
+                            <div class="col-md-6 d-flex align-items-center">
+                                <label for="{{ bill_form.total.id_for_label }}" class="form-label col-md-4">Total
                                     (INR)</label>
-                                {% render_field bill_form.total class="form-control" %}
-                                {{ bill_form.total.errors }}
+                                <div class="col-md-8">
+                                    {% render_field bill_form.total class="form-control" %}
+                                    {{ bill_form.total.errors }}
+                                </div>
                             </div>
                         </div>
                         <!-- Notes -->

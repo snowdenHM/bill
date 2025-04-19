@@ -2,7 +2,7 @@ from django import forms
 from django.forms import modelformset_factory, Textarea
 from django.forms import BaseModelFormSet
 from apps.bills.tally.models import TallyVendorBill, TallyVendorAnalyzedProduct, TallyVendorAnalyzedBill, Ledger, \
-    ParentLedger, TallyExpenseBill, TallyExpenseAnalyzedBill, TallyExpenseAnalyzedProduct
+    ParentLedger, TallyExpenseBill, TallyExpenseAnalyzedBill, TallyExpenseAnalyzedProduct, TallyConfig
 
 
 class TallyVendorBillForm(forms.ModelForm):
@@ -17,23 +17,33 @@ class TallyVendorBillForm(forms.ModelForm):
 
 class TallyVendorAnalyzedBillForm(forms.ModelForm):
     """
-    Form for reviewing and verifying analyzed Vendor Bills.
+    Form for reviewing and verifying analyzed Vendor Bills using dynamic TallyConfig.
     """
 
     def __init__(self, *args, **kwargs):
         team = kwargs.pop('team', None)
         super().__init__(*args, **kwargs)
-        # Fetch ParentLedger for "Sundry Creditors"
+
+        # Fetch TallyConfig for the given team
         try:
-            sundry_creditors = ParentLedger.objects.get(parent="Sundry Creditors", team=team)
-            # Get all Ledgers under "Sundry Creditors"
-            self.fields['vendor'].queryset = Ledger.objects.filter(parent=sundry_creditors)
-        except ParentLedger.DoesNotExist:
+            tally_config = TallyConfig.objects.get(team=team)
+            # Dynamically assign querysets based on the selected ParentLedgers
+            self.fields['vendor'].queryset = Ledger.objects.filter(parent=tally_config.vendor_parent)
+            self.fields['igst_taxes'].queryset = Ledger.objects.filter(parent=tally_config.igst_parent)
+            self.fields['cgst_taxes'].queryset = Ledger.objects.filter(parent=tally_config.cgst_parent)
+            self.fields['sgst_taxes'].queryset = Ledger.objects.filter(parent=tally_config.sgst_parent)
+        except TallyConfig.DoesNotExist:
             self.fields['vendor'].queryset = Ledger.objects.none()
+            self.fields['igst_taxes'].queryset = Ledger.objects.none()
+            self.fields['cgst_taxes'].queryset = Ledger.objects.none()
+            self.fields['sgst_taxes'].queryset = Ledger.objects.none()
 
     class Meta:
         model = TallyVendorAnalyzedBill
-        fields = ['selectBill', 'vendor', 'bill_no', 'bill_date', 'total', 'igst', 'cgst', 'sgst', 'note']
+        fields = [
+            'selectBill', 'vendor', 'bill_no', 'bill_date', 'total',
+            'igst', 'igst_taxes', 'cgst', 'cgst_taxes', 'sgst', 'sgst_taxes', 'note'
+        ]
 
 
 class TallyVendorAnalyzedProductForm(forms.ModelForm):
@@ -45,8 +55,9 @@ class TallyVendorAnalyzedProductForm(forms.ModelForm):
         team = kwargs.pop('team', None)
         super().__init__(*args, **kwargs)
         try:
-            duties_taxes = ParentLedger.objects.get(parent="Duties & Taxes", team=team)
-            self.fields['taxes'].queryset = Ledger.objects.filter(parent=duties_taxes)
+            tally_config = TallyConfig.objects.get(team=team)
+            # Dynamically assign querysets based on the selected ParentLedgers
+            self.fields['taxes'].queryset = Ledger.objects.filter(parent=tally_config.chart_of_accounts)
         except ParentLedger.DoesNotExist:
             self.fields['taxes'].queryset = Ledger.objects.none()
 
@@ -91,12 +102,35 @@ class ExpenseBillForm(forms.ModelForm):
 
 class ExpenseAnalyzedBillForm(forms.ModelForm):
     """
-    Form for reviewing and verifying analyzed Expense Bills.
+    Form for reviewing and verifying analyzed Expense Bills using dynamic TallyConfig.
     """
+
+    def __init__(self, *args, **kwargs):
+        team = kwargs.pop('team', None)
+        super().__init__(*args, **kwargs)
+
+        # Fetch TallyConfig for the given team
+        try:
+            tally_config = TallyConfig.objects.get(team=team)
+
+            # Dynamically assign querysets based on the selected ParentLedgers
+            self.fields['vendor'].queryset = Ledger.objects.filter(parent=tally_config.vendor_parent)
+            self.fields['igst_taxes'].queryset = Ledger.objects.filter(parent=tally_config.igst_parent)
+            self.fields['cgst_taxes'].queryset = Ledger.objects.filter(parent=tally_config.cgst_parent)
+            self.fields['sgst_taxes'].queryset = Ledger.objects.filter(parent=tally_config.sgst_parent)
+
+        except TallyConfig.DoesNotExist:
+            self.fields['vendor'].queryset = Ledger.objects.none()
+            self.fields['igst_taxes'].queryset = Ledger.objects.none()
+            self.fields['cgst_taxes'].queryset = Ledger.objects.none()
+            self.fields['sgst_taxes'].queryset = Ledger.objects.none()
 
     class Meta:
         model = TallyExpenseAnalyzedBill
-        fields = ['selectBill', 'voucher', 'bill_no', 'bill_date', 'total', 'igst', 'cgst', 'sgst', 'note']
+        fields = [
+            'selectBill', 'vendor', 'voucher', 'bill_no', 'bill_date', 'total',
+            'igst', 'cgst', 'sgst', 'note', 'igst_taxes', 'cgst_taxes', 'sgst_taxes'
+        ]
 
 
 class ExpenseAnalyzedProductForm(forms.ModelForm):
@@ -109,11 +143,12 @@ class ExpenseAnalyzedProductForm(forms.ModelForm):
         team = kwargs.pop('team', None)
         super().__init__(*args, **kwargs)
         try:
-            expense = ParentLedger.objects.get(parent="Input Tax Credit", team=team)
-            self.fields['chart_of_accounts'].queryset = Ledger.objects.filter(parent=expense)
+            tally_config = TallyConfig.objects.get(team=team)
+            # Dynamically assign querysets based on the selected ParentLedgers
+            self.fields['chart_of_accounts'].queryset = Ledger.objects.filter(
+                parent=tally_config.chart_of_accounts_expense)
         except ParentLedger.DoesNotExist:
             self.fields['chart_of_accounts'].queryset = Ledger.objects.none()
-        print(ParentLedger.objects.get(parent="Indirect Expenses", team=team))
 
     class Meta:
         model = TallyExpenseAnalyzedProduct
