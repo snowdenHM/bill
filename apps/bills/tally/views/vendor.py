@@ -435,7 +435,7 @@ def bill_sync_process(request, team_slug, bill_id):
         }
 
         # API endpoint
-        api_url = f'{settings.SERVER_URL}/a/{team_slug}/bills/tally/api/v1/vendor/'
+        api_url = f'{settings.SERVER_URL}/org/{team_slug}/bills/tally/api/v1/vendor/'
 
         # Send POST request
         response = requests.post(api_url, json=bill_data)

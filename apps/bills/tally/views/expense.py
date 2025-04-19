@@ -438,7 +438,7 @@ def expense_bill_sync_process(request, team_slug, bill_id):
         print(json.dumps(bill_data, indent=2))
 
         # API URL for syncing data
-        api_url = f'{settings.SERVER_URL}/a/{team_slug}/bills/tally/api/v1/expense/'
+        api_url = f'{settings.SERVER_URL}/org/{team_slug}/bills/tally/api/v1/expense/'
 
         # Send the POST request to Tally API
         response = requests.post(api_url, json=bill_data)

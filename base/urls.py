@@ -27,7 +27,7 @@ urlpatterns = [
                   path("admin/", admin.site.urls),
                   path("dashboard/", include("apps.dashboard.urls")),
                   path("sitemap.xml", sitemap, {"sitemaps": sitemaps}, name="django.contrib.sitemaps.views.sitemap"),
-                  path("a/<slug:team_slug>/", include(team_urlpatterns)),
+                  path("org/<slug:team_slug>/", include(team_urlpatterns)),
                   path("accounts/", include("allauth.urls")),
                   path("users/", include("apps.users.urls")),
                   path("teams/", include("apps.teams.urls")),
