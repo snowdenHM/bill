@@ -21,7 +21,7 @@ class LedgerViewSet(viewsets.ModelViewSet):
         # Print the full request URL
         full_url = request.build_absolute_uri()
         print(f"Full Request URL: {full_url}")
-        match = re.search(r"/a/([^/]+)/bills/", request.path)
+        match = re.search(r"/org/([^/]+)/bills/", request.path)
         team = match.group(1) if match else None
         ledger_data = request.data.get("LEDGER", [])
 
