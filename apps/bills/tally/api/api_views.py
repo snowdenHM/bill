@@ -131,7 +131,6 @@ class TallyExpenseApi(APIView):
                     "products": [
                         {
                             "id": product.id,
-                            "item_details": product.item_details or "N/A",
                             "chart_of_accounts": str(
                                 product.chart_of_accounts.name) if product.chart_of_accounts else "No Chart",
                             "amount": float(product.amount) if product.amount else 0.0,
