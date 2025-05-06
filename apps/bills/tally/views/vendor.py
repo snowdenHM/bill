@@ -359,6 +359,10 @@ def bill_verification_process(request, team_slug, bill_id):
             amount_id = request.POST.get(amount_key)
             if amount_id:
                 product.amount = amount_id
+            product_gst_key = f"form-{index}-product_gst"
+            product_gst = request.POST.get(product_gst_key)
+            if product_gst:
+                product.product_gst = product_gst
         # Save the updated analysed_bill and analysed_products
         analysed_bill.team = request.team
         analysed_bill.save()
@@ -429,6 +433,7 @@ def bill_sync_process(request, team_slug, bill_id):
                     "price": float(item.price),
                     "quantity": int(item.quantity),
                     "amount": float(item.amount),
+                    "gst": item.product_gst,
                 }
                 for item in analysed_bill_products
             ],

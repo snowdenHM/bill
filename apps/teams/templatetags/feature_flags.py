@@ -17,10 +17,7 @@ def is_flag_active(context, flag_name, slug):
             else:
                 flag_active = False
         except Flag.DoesNotExist:
-            flag_active = False
-
-        # Cache the result for a specified time
-        # cache.set(cache_key, flag_active, timeout=60*5)  # Cache for 5 minutes
+            print("Flag does not exist")
     else:
         flag_active = False
     return flag_active

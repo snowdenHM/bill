@@ -51,7 +51,8 @@ class TallyConfig(BaseTeamModel):
                                       related_name="coa_tally_config", verbose_name="COA Parent Ledger")
     chart_of_accounts_expense = models.ForeignKey(ParentLedger, on_delete=models.SET_NULL, null=True, blank=True,
                                           related_name="ex_coa_tally_config", verbose_name="EX COA Parent Ledger")
-
+    # vendor_product_gst = models.ForeignKey(ParentLedger, on_delete=models.SET_NULL, null=True, blank=True,
+    #                                       related_name="product_gst_tally_config", verbose_name="Product GST Parent Ledger")
     class Meta:
         verbose_name_plural = "Tally Configurations"
 
@@ -164,6 +165,16 @@ class TallyVendorAnalyzedProduct(BaseTeamModel):
     Stores analyzed products from vendor bills.
     """
 
+    GST_CHOICES = [
+        ("0%", "0%"),
+        ("5%", "5%"),
+        ("12%", "12%"),
+        ("18%", "18%"),
+        ("28%", "28%"),
+        ("Exempted", "Exempted"),
+        ("N/A", "N/A"),
+    ]
+
     id = models.UUIDField(default=uuid.uuid4, unique=True, primary_key=True, editable=False)
     vendor_bill_analyzed = models.ForeignKey(TallyVendorAnalyzedBill, on_delete=models.CASCADE, related_name='products')
     item_name = models.CharField(max_length=100, null=True, blank=True)
@@ -172,6 +183,7 @@ class TallyVendorAnalyzedProduct(BaseTeamModel):
     price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     quantity = models.PositiveIntegerField(null=True, blank=True, default=0)
     amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    product_gst = models.CharField(max_length=10, choices=GST_CHOICES, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -179,6 +191,7 @@ class TallyVendorAnalyzedProduct(BaseTeamModel):
 
     def __str__(self):
         return self.item_name if self.item_name else "Unnamed Product"
+
 
 
 #### Expense Journal Bill

@@ -114,13 +114,14 @@
                         </div>
                         {{ formset.management_data }}
                         <div class="row mt-4">
-                            <table class="table table-nowrap dt-responsive nowrap w-100">
+                            <table class="table table-responsive">
                                 <thead>
                                 <tr>
                                     <th>S.No.</th>
                                     <th>Item</th>
                                     <th>Quantity</th>
                                     <th>Prices</th>
+                                    <th>GST</th>
                                     <th>Chart of Accounts</th>
                                     <th>Amount</th>
                                 </tr>
@@ -133,9 +134,10 @@
                                 {% for form in formset %}
                                     <tr id="data-{{ forloop.counter }}">
                                         <td>{{ forloop.counter }}</td>
-                                        <td>{% render_field form.item_details class="form-control" rows='1' %}</td>
+                                        <td>{% render_field form.item_details class="form-control" rows='2' %}</td>
                                         <td>{% render_field form.quantity class="form-control" %}</td>
                                         <td>{% render_field form.price class="form-control" %}</td>
+                                        <td>{% render_field form.product_gst class="form-control"  %}</td>
                                         <td>{% render_field form.taxes class="js-example-basic-single" %}</td>
                                         <td>{% render_field form.amount class="form-control" %}</td>
                                     </tr>

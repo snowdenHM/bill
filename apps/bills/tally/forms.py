@@ -63,7 +63,7 @@ class TallyVendorAnalyzedProductForm(forms.ModelForm):
 
     class Meta:
         model = TallyVendorAnalyzedProduct
-        fields = ['item_name', 'item_details', 'taxes', 'price', 'quantity', 'amount']
+        fields = ['item_name', 'item_details', 'taxes', 'price', 'quantity', 'amount', 'product_gst']
 
 
 # ✅

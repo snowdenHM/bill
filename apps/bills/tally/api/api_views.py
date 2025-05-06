@@ -221,6 +221,7 @@ class TallyVendor(APIView):
                             "price": float(transaction.price),
                             "quantity": int(transaction.quantity),
                             "amount": float(transaction.amount),
+                            "gst": transaction.product_gst
                         }
                         for transaction in vendor.products.all()
                     ]
