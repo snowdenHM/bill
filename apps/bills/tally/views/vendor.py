@@ -235,7 +235,7 @@ def bill_analysis_process(request, team_slug, bill_id):
     except Exception as error:
         logger.error(f"AI processing failed: {error}")
         messages.warning(request, 'AI processing failed.')
-        return redirect('zoho:vendor_bill_list', team_slug=team_slug)
+        return redirect('tally:vendor_bill_list', team_slug=team_slug)
 
     # Save extracted data to the bill object
     try:
@@ -276,11 +276,22 @@ def bill_analysis_process(request, team_slug, bill_id):
 
             # Find the matching vendor in vendor_list (Case-Insensitive Exact Match)
             vendor = vendor_list.filter(name__iexact=company_name).first()
-            # If no exact match, try partial match
             if not vendor:
                 vendor = vendor_list.filter(name__icontains=company_name).first()
         except ParentLedger.DoesNotExist:
             vendor = None
+
+        # Determine GST Type
+        igst_val = float(relevant_data.get('igst') or 0)
+        cgst_val = float(relevant_data.get('cgst') or 0)
+        sgst_val = float(relevant_data.get('sgst') or 0)
+
+        if igst_val > 0:
+            gst_type = "Inter-State"
+        elif cgst_val > 0 or sgst_val > 0:
+            gst_type = "Intra-State"
+        else:
+            gst_type = "Unknown"
 
         # Create VendorAnalyzedBill entry
         analyzed_bill = TallyVendorAnalyzedBill.objects.create(
@@ -288,12 +299,13 @@ def bill_analysis_process(request, team_slug, bill_id):
             vendor=vendor,
             bill_no=invoice_number,
             bill_date=date_issued,
-            igst=relevant_data.get('igst', 0),
-            cgst=relevant_data.get('cgst', 0),
-            sgst=relevant_data.get('sgst', 0),
+            igst=igst_val,
+            cgst=cgst_val,
+            sgst=sgst_val,
             total=relevant_data.get('total', 0),
             note="AI Analyzed Bill",
-            team=request.team
+            team=request.team,
+            gst_type=gst_type
         )
 
         # Bulk create VendorAnalyzedProduct entries
@@ -301,9 +313,9 @@ def bill_analysis_process(request, team_slug, bill_id):
             TallyVendorAnalyzedProduct(
                 vendor_bill_analyzed=analyzed_bill,
                 item_details=item.get('description', ''),
-                price=float(item.get('price', 0) or 0),  # Ensure numeric value
-                quantity=int(item.get('quantity', 0) or 0),  # Ensure numeric value
-                amount=float(item.get('price', 0) or 0) * int(item.get('quantity', 0) or 0),  # Fix multiplication
+                price=float(item.get('price', 0) or 0),
+                quantity=int(item.get('quantity', 0) or 0),
+                amount=float(item.get('price', 0) or 0) * int(item.get('quantity', 0) or 0),
                 team=request.team
             ) for item in relevant_data.get('items', [])
         ]
@@ -332,52 +344,131 @@ def bill_analysis_process(request, team_slug, bill_id):
 @login_and_team_required(login_url='account_login')
 def bill_verification_process(request, team_slug, bill_id):
     """
-    Marks a bill as verified.
+    Marks a bill as verified after validating product-level tax totals
+    against bill-level taxes.
     """
     detailBill = get_object_or_404(TallyVendorBill, id=bill_id)
     analysed_bill = get_object_or_404(TallyVendorAnalyzedBill, selectBill=detailBill)
     analysed_products = TallyVendorAnalyzedProduct.objects.filter(vendor_bill_analyzed=analysed_bill).all()
+
     if request.method == 'POST':
         bill_form = TallyVendorAnalyzedBillForm(request.POST)
-        # Update the analysed_bill and analysed_products based on POST data
+
+        # Update bill fields
         analysed_bill.vendor_id = request.POST.get('vendor')
         analysed_bill.note = request.POST.get('note')
         analysed_bill.bill_no = request.POST.get('bill_no')
         analysed_bill.bill_date = request.POST.get('bill_date')
-        analysed_bill.cgst = request.POST.get('cgst')
-        analysed_bill.sgst = request.POST.get('sgst')
-        analysed_bill.igst = request.POST.get('igst')
-        analysed_bill.igst_taxes = Ledger.objects.get(id=request.POST.get('igst_taxes'))
-        analysed_bill.cgst_taxes = Ledger.objects.get(id=request.POST.get('cgst_taxes'))
-        analysed_bill.sgst_taxes = Ledger.objects.get(id=request.POST.get('sgst_taxes'))
+        analysed_bill.cgst = float(request.POST.get('cgst') or 0)
+        analysed_bill.sgst = float(request.POST.get('sgst') or 0)
+        analysed_bill.igst = float(request.POST.get('igst') or 0)
+
+        try:
+            analysed_bill.igst_taxes = Ledger.objects.get(id=request.POST.get('igst_taxes'))
+        except Ledger.DoesNotExist:
+            analysed_bill.igst_taxes = None
+        try:
+            analysed_bill.cgst_taxes = Ledger.objects.get(id=request.POST.get('cgst_taxes'))
+        except Ledger.DoesNotExist:
+            analysed_bill.cgst_taxes = None
+        try:
+            analysed_bill.sgst_taxes = Ledger.objects.get(id=request.POST.get('sgst_taxes'))
+        except Ledger.DoesNotExist:
+            analysed_bill.sgst_taxes = None
+
+        # Initialize product tax totals
+        total_product_igst = 0
+        total_product_cgst = 0
+        total_product_sgst = 0
+
+        # Update product data
         for index, product in enumerate(analysed_products):
             taxes_key = f"form-{index}-taxes"
-            taxes_id = request.POST.get(taxes_key)
-            if taxes_id:
-                product.taxes = Ledger.objects.get(id=taxes_id)
             amount_key = f"form-{index}-amount"
-            amount_id = request.POST.get(amount_key)
-            if amount_id:
-                product.amount = amount_id
             product_gst_key = f"form-{index}-product_gst"
+
+            taxes_id = request.POST.get(taxes_key)
+            amount_val = request.POST.get(amount_key)
             product_gst = request.POST.get(product_gst_key)
+
+            if taxes_id:
+                try:
+                    product.taxes = Ledger.objects.get(id=taxes_id)
+                except Ledger.DoesNotExist:
+                    product.taxes = None
+
+            if amount_val:
+                try:
+                    product.amount = float(amount_val)
+                except ValueError:
+                    product.amount = 0
+
             if product_gst:
                 product.product_gst = product_gst
-        # Save the updated analysed_bill and analysed_products
-        analysed_bill.team = request.team
-        analysed_bill.save()
-        for product in analysed_products:
+                product.igst = 0
+                product.cgst = 0
+                product.sgst = 0
+
+                try:
+                    gst_percent = float(product_gst.strip('%')) if "%" in product_gst else 0
+                    gst_amount = (gst_percent / 100) * float(product.amount or 0)
+
+                    if analysed_bill.gst_type == "Inter-State":
+                        product.igst = round(gst_amount, 2)
+                        total_product_igst += product.igst
+                    elif analysed_bill.gst_type == "Intra-State":
+                        product.cgst = round(gst_amount / 2, 2)
+                        product.sgst = round(gst_amount / 2, 2)
+                        total_product_cgst += product.cgst
+                        total_product_sgst += product.sgst
+
+                except Exception as e:
+                    logger.warning(f"GST calculation failed for product {index}: {e}")
+
             product.team = request.team
             product.save()
+
+        # ✅ Verify tax consistency
+        verification_passed = True
+        if analysed_bill.gst_type == "Inter-State":
+            if round(total_product_igst, 2) != round(analysed_bill.igst, 2):
+                verification_passed = False
+                messages.warning(request,
+                                 f"IGST mismatch: Sum of product IGST = {total_product_igst}, Bill IGST = {analysed_bill.igst}")
+        elif analysed_bill.gst_type == "Intra-State":
+            if round(total_product_cgst, 2) != round(analysed_bill.cgst, 2) or \
+                    round(total_product_sgst, 2) != round(analysed_bill.sgst, 2):
+                verification_passed = False
+                messages.warning(request,
+                                 f"CGST/SGST mismatch: Products CGST/SGST = {total_product_cgst}/{total_product_sgst}, Bill CGST/SGST = {analysed_bill.cgst}/{analysed_bill.sgst}")
+
+        if not verification_passed:
+            return redirect('tally:verify_bill', team_slug=team_slug, bill_id=bill_id)
+
+        # ✅ Mark as verified
+        analysed_bill.team = request.team
+        analysed_bill.save()
         detailBill.status = "Verified"
         detailBill.save()
+
+        messages.success(request, "Bill verified successfully.")
         return redirect('tally:vendor_bill_analyzed', team_slug=team_slug)
+
     else:
         bill_form = TallyVendorAnalyzedBillForm(instance=analysed_bill, team=request.team)
         formset = TallyVendorProductFormSet(
-            queryset=TallyVendorAnalyzedProduct.objects.filter(vendor_bill_analyzed=analysed_bill), team=request.team)
-    context = {'detailBill': detailBill, 'bill_form': bill_form, 'formset': formset,
-               'analysed_products': analysed_products, "heading": "Bill Verification"}
+            queryset=analysed_products,
+            team=request.team
+        )
+
+    context = {
+        'detailBill': detailBill,
+        'bill_form': bill_form,
+        'formset': formset,
+        'analysed_products': analysed_products,
+        "heading": "Bill Verification"
+    }
+
     return render(request, 'tally/vendor/verify_bill.html', context)
 
 
@@ -434,6 +525,9 @@ def bill_sync_process(request, team_slug, bill_id):
                     "quantity": int(item.quantity),
                     "amount": float(item.amount),
                     "gst": item.product_gst,
+                    "igst": float(item.igst or 0),
+                    "cgst": float(item.cgst or 0),
+                    "sgst": float(item.sgst or 0),
                 }
                 for item in analysed_bill_products
             ],

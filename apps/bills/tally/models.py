@@ -48,9 +48,11 @@ class TallyConfig(BaseTeamModel):
     vendor_parent = models.ForeignKey(ParentLedger, on_delete=models.SET_NULL, null=True, blank=True,
                                       related_name="vendor_tally_config", verbose_name="Vendor Parent Ledger")
     chart_of_accounts = models.ForeignKey(ParentLedger, on_delete=models.SET_NULL, null=True, blank=True,
-                                      related_name="coa_tally_config", verbose_name="COA Parent Ledger")
+                                          related_name="coa_tally_config", verbose_name="COA Parent Ledger")
     chart_of_accounts_expense = models.ForeignKey(ParentLedger, on_delete=models.SET_NULL, null=True, blank=True,
-                                          related_name="ex_coa_tally_config", verbose_name="EX COA Parent Ledger")
+                                                  related_name="ex_coa_tally_config",
+                                                  verbose_name="EX COA Parent Ledger")
+
     # vendor_product_gst = models.ForeignKey(ParentLedger, on_delete=models.SET_NULL, null=True, blank=True,
     #                                       related_name="product_gst_tally_config", verbose_name="Product GST Parent Ledger")
     class Meta:
@@ -133,6 +135,12 @@ class TallyVendorAnalyzedBill(BaseTeamModel):
         ('TDS', 'is_tds_tax'),
     )
 
+    BILL_GST_TYPE = (
+        ('Intra-State', 'Intra-State'),  # CGST + SGST
+        ('Inter-State', 'Inter-State'),  # IGST
+        ('Unknown', 'Unknown'),
+    )
+
     id = models.UUIDField(default=uuid.uuid4, unique=True, primary_key=True, editable=False)
     selectBill = models.ForeignKey(TallyVendorBill, on_delete=models.CASCADE, null=True, blank=True)
     vendor = models.ForeignKey(Ledger, on_delete=models.CASCADE, null=True, blank=True,
@@ -149,6 +157,7 @@ class TallyVendorAnalyzedBill(BaseTeamModel):
     sgst = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, default=0)
     sgst_taxes = models.ForeignKey(Ledger, on_delete=models.CASCADE, null=True, blank=True,
                                    related_name="sgst_tally_vendor_analyzed_bills")
+    gst_type = models.CharField(max_length=20, choices=BILL_GST_TYPE, default='Unknown')
     note = models.TextField(null=True, blank=True, default="Enter Your Description")
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -184,6 +193,10 @@ class TallyVendorAnalyzedProduct(BaseTeamModel):
     quantity = models.PositiveIntegerField(null=True, blank=True, default=0)
     amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     product_gst = models.CharField(max_length=10, choices=GST_CHOICES, null=True, blank=True)
+    igst = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, default=0)
+    cgst = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, default=0)
+    sgst = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, default=0)
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -191,7 +204,6 @@ class TallyVendorAnalyzedProduct(BaseTeamModel):
 
     def __str__(self):
         return self.item_name if self.item_name else "Unnamed Product"
-
 
 
 #### Expense Journal Bill
