@@ -364,17 +364,31 @@ def bill_verification_process(request, team_slug, bill_id):
         analysed_bill.igst = float(request.POST.get('igst') or 0)
 
         try:
-            analysed_bill.igst_taxes = Ledger.objects.get(id=request.POST.get('igst_taxes'))
-        except Ledger.DoesNotExist:
-            analysed_bill.igst_taxes = None
-        try:
-            analysed_bill.cgst_taxes = Ledger.objects.get(id=request.POST.get('cgst_taxes'))
+            cgst_taxes_id = request.POST.get('cgst_taxes')
+            if cgst_taxes_id:
+                analysed_bill.cgst_taxes = Ledger.objects.get(id=cgst_taxes_id)
+            else:
+                analysed_bill.cgst_taxes = None
         except Ledger.DoesNotExist:
             analysed_bill.cgst_taxes = None
+
         try:
-            analysed_bill.sgst_taxes = Ledger.objects.get(id=request.POST.get('sgst_taxes'))
+            sgst_taxes_id = request.POST.get('sgst_taxes')
+            if sgst_taxes_id:
+                analysed_bill.sgst_taxes = Ledger.objects.get(id=sgst_taxes_id)
+            else:
+                analysed_bill.sgst_taxes = None
         except Ledger.DoesNotExist:
             analysed_bill.sgst_taxes = None
+
+        try:
+            igst_taxes_id = request.POST.get('igst_taxes')
+            if igst_taxes_id:
+                analysed_bill.igst_taxes = Ledger.objects.get(id=igst_taxes_id)
+            else:
+                analysed_bill.igst_taxes = None
+        except Ledger.DoesNotExist:
+            analysed_bill.igst_taxes = None
 
         # Initialize product tax totals
         total_product_igst = 0
@@ -532,7 +546,7 @@ def bill_sync_process(request, team_slug, bill_id):
                 for item in analysed_bill_products
             ],
         }
-
+        print(json.dumps(bill_data, indent=4))
         # API endpoint
         api_url = f'{settings.SERVER_URL}/org/{team_slug}/bills/tally/api/v1/vendor/'
 
