@@ -457,7 +457,7 @@ def bill_verification_process(request, team_slug, bill_id):
                                  f"CGST/SGST mismatch: Products CGST/SGST = {total_product_cgst}/{total_product_sgst}, Bill CGST/SGST = {analysed_bill.cgst}/{analysed_bill.sgst}")
 
         if not verification_passed:
-            return redirect('tally:verify_bill', team_slug=team_slug, bill_id=bill_id)
+            return redirect('tally:vendor_bill_verification_process', team_slug=team_slug, bill_id=bill_id)
 
         # ✅ Mark as verified
         analysed_bill.team = request.team
