@@ -137,7 +137,7 @@
                                         <td>{% render_field form.item_details class="form-control" rows='2' %}</td>
                                         <td>{% render_field form.quantity class="form-control" %}</td>
                                         <td>{% render_field form.price class="form-control" %}</td>
-                                        <td>{% render_field form.product_gst class="form-control"  %}</td>
+                                        <td>{% render_field form.product_gst class="form-control" %}</td>
                                         <td>{% render_field form.taxes class="js-example-basic-single" %}</td>
                                         <td>{% render_field form.amount class="form-control" %}</td>
                                     </tr>
@@ -236,6 +236,38 @@
                 rubberband: false
             });
         });
+    </script>
+    <script src={% static "libs/notifier-js/dist/js/notifier.js" %}></script>
+    <script>
+        // Check if there are any messages to display
+        {% if messages %}
+            {% for message in messages %}
+                // Determine the notification type based on the message tags
+                let type = '';
+                let icon = '';
+                if ("{{ message.tags }}" === "success") {
+                    type = 'success';
+                    icon = '/static/assets/images/notification/ok-48.png';
+                } else if ("{{ message.tags }}" === "info") {
+                    type = 'info';
+                    icon = '/static/assets/images/notification/survey-48.png';
+                } else if ("{{ message.tags }}" === "warning") {
+                    type = 'warning';
+                    icon = '/static/assets/images/notification/medium_priority-48.png';
+                } else if ("{{ message.tags }}" === "danger") {
+                    type = 'danger';
+                    icon = '/static/assets/images/notification/high_priority-48.png';
+                }
+                // Display the notification using notifier.js
+                notifier.show(
+                    'Notification', // Title
+                    "{{ message }}", // Message content
+                    type, // Notification type (success, info, warning, danger)
+                    icon, // Icon URL
+                    4000 // Auto-close timeout in milliseconds
+                );
+            {% endfor %}
+        {% endif %}
     </script>
 
     <!--select2 cdn-->
