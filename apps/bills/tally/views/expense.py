@@ -256,6 +256,16 @@ def expense_bill_analysis_process(request, team_slug, bill_id):
         if "properties" in json_data:
             props = json_data["properties"]
 
+            def extract_value(prop):
+                if isinstance(prop, dict):
+                    return prop.get("const", "")
+                return prop
+
+            # Fix: Safely extract items list
+            raw_items = props.get("items", [])
+            if isinstance(raw_items, dict) and "items" in raw_items:
+                raw_items = raw_items["items"]
+
             relevant_data = {
                 "invoiceNumber": extract_value(props.get("invoiceNumber", "")),
                 "dateIssued": extract_value(props.get("dateIssued", "")),
@@ -267,7 +277,7 @@ def expense_bill_analysis_process(request, team_slug, bill_id):
                         "description": extract_value(item.get("description", "")),
                         "quantity": extract_value(item.get("quantity", 0)),
                         "price": extract_value(item.get("price", 0)),
-                    } for item in props.get("items", {}).get("items", [])
+                    } for item in raw_items
                 ],
                 "total": extract_value(props.get("total", 0)),
                 "igst": extract_value(props.get("igst", 0)),
