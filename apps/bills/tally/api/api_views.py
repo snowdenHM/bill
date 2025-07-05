@@ -93,57 +93,82 @@ class TallyExpenseApi(APIView):
 
     def get(self, request, team_slug, *args, **kwargs):
         """
-        Retrieve all synced expense bills with related products.
+        Retrieve all synced expense bills grouped by voucher.
         """
         try:
-            # Get all expenses where the associated TallyExpenseBill status is 'Synced'
+            # Get all 'Synced' analyzed bills for the team
             expenses = TallyExpenseAnalyzedBill.objects.filter(
-                selectBill__status='Synced', selectBill__team__slug=team_slug
-            ).select_related('vendor', 'selectBill')
+                selectBill__status='Synced',
+                selectBill__team__slug=team_slug
+            ).select_related('vendor', 'selectBill').prefetch_related('products')
 
-            data = [
-                {
-                    "id": expense.id,
-                    "voucher": expense.voucher or "N/A",
-                    "bill_no": expense.bill_no or "N/A",
-                    "bill_date": expense.bill_date.strftime('%Y-%m-%d') if expense.bill_date else None,
-                    "total": float(expense.total) if expense.total else 0.0,
-                    "vendor": {
-                        "name": expense.vendor.name if expense.vendor else "No Vendor",
-                        "company": expense.vendor.company if expense.vendor else "No Company",
-                        "gst_in": expense.vendor.gst_in if expense.vendor else "No GST",
-                    },
-                    "taxes": {
-                        "igst": {
-                            "amount": float(expense.igst) if expense.igst else 0.0,
-                            "ledger": str(expense.igst_taxes) if expense.igst_taxes else "No Tax Ledger",
-                        },
-                        "cgst": {
-                            "amount": float(expense.cgst) if expense.cgst else 0.0,
-                            "ledger": str(expense.cgst_taxes) if expense.cgst_taxes else "No Tax Ledger",
-                        },
-                        "sgst": {
-                            "amount": float(expense.sgst) if expense.sgst else 0.0,
-                            "ledger": str(expense.sgst_taxes) if expense.sgst_taxes else "No Tax Ledger",
-                        }
-                    },
-                    "note": expense.note or "No Notes",
-                    "products": [
-                        {
-                            "id": product.id,
-                            "chart_of_accounts": str(
-                                product.chart_of_accounts.name) if product.chart_of_accounts else "No Chart",
-                            "amount": float(product.amount) if product.amount else 0.0,
-                            "debit_or_credit": product.debit_or_credit or "credit",
-                        }
-                        for product in expense.products.all()
-                    ],
-                    "created_at": expense.created_at.strftime('%Y-%m-%d %H:%M:%S') if expense.created_at else None,
-                }
-                for expense in expenses
-            ]
+            grouped = defaultdict(lambda: {
+                "id": None,
+                "voucher": None,
+                "bill_no": None,
+                "bill_date": None,
+                "total": 0.0,
+                "vendor": {
+                    "name": "",
+                    "company": "",
+                    "gst_in": ""
+                },
+                "taxes": {
+                    "igst": {"amount": 0.0, "ledger": ""},
+                    "cgst": {"amount": 0.0, "ledger": ""},
+                    "sgst": {"amount": 0.0, "ledger": ""}
+                },
+                "note": "",
+                "products": [],
+                "created_at": None
+            })
 
-            return Response({"data": data}, status=status.HTTP_200_OK)
+            for expense in expenses:
+                voucher = expense.voucher or "N/A"
+                group = grouped[voucher]
+
+                # Only set once (for the first time the voucher is seen)
+                if not group["id"]:
+                    group.update({
+                        "id": expense.id,
+                        "voucher": voucher,
+                        "bill_no": expense.bill_no or "N/A",
+                        "bill_date": expense.bill_date.strftime('%Y-%m-%d') if expense.bill_date else None,
+                        "total": float(expense.total) if expense.total else 0.0,
+                        "vendor": {
+                            "name": expense.vendor.name if expense.vendor else "No Vendor",
+                            "company": expense.vendor.company if expense.vendor else "No Company",
+                            "gst_in": expense.vendor.gst_in if expense.vendor else "No GST",
+                        },
+                        "taxes": {
+                            "igst": {
+                                "amount": float(expense.igst) if expense.igst else 0.0,
+                                "ledger": str(expense.igst_taxes) if expense.igst_taxes else "No Tax Ledger",
+                            },
+                            "cgst": {
+                                "amount": float(expense.cgst) if expense.cgst else 0.0,
+                                "ledger": str(expense.cgst_taxes) if expense.cgst_taxes else "No Tax Ledger",
+                            },
+                            "sgst": {
+                                "amount": float(expense.sgst) if expense.sgst else 0.0,
+                                "ledger": str(expense.sgst_taxes) if expense.sgst_taxes else "No Tax Ledger",
+                            }
+                        },
+                        "note": expense.note or "No Notes",
+                        "created_at": expense.created_at.strftime('%Y-%m-%d %H:%M:%S') if expense.created_at else None,
+                    })
+
+                # Append all products
+                for product in expense.products.all():
+                    group["products"].append({
+                        "id": product.id,
+                        "chart_of_accounts": str(
+                            product.chart_of_accounts.name) if product.chart_of_accounts else "No Chart",
+                        "amount": float(product.amount) if product.amount else 0.0,
+                        "debit_or_credit": product.debit_or_credit or "credit",
+                    })
+
+            return Response({"data": list(grouped.values())}, status=status.HTTP_200_OK)
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
