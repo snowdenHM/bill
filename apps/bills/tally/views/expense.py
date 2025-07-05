@@ -176,18 +176,21 @@ def expense_bill_analysis_process(request, team_slug, bill_id):
     """
     Analyzes and processes a vendor bill using AI.
     """
+    logger.info("Starting expense bill analysis for bill_id=%s", bill_id)
+
     bill = get_object_or_404(TallyExpenseBill, id=bill_id)
 
-    # Read the file and convert to Base64
+    # Read file and convert to Base64
     try:
         with open(bill.file.path, 'rb') as f:
             image_base64 = base64.b64encode(f.read()).decode('utf-8')
+        logger.info("Successfully read and encoded bill file for bill_id=%s", bill_id)
     except Exception as error:
-        logger.error(f"Error reading bill file: {error}")
+        logger.exception("Error reading bill file")
         messages.warning(request, 'Error reading the bill file.')
         return redirect('tally:vendor_bill_list', team_slug=team_slug)
 
-    # JSON Schema for AI extraction
+    # Define schema for AI
     invoice_schema = {
         "$schema": "http://json-schema.org/draft/2020-12/schema",
         "title": "Invoice",
@@ -217,62 +220,79 @@ def expense_bill_analysis_process(request, team_slug, bill_id):
         }
     }
 
-    # AI Processing Request
+    # AI processing
     try:
+        logger.info("Sending image to AI for processing...")
+
         response = client.chat.completions.create(
             model='gpt-4o',
             response_format={"type": "json_object"},
             messages=[{
                 "role": "user",
                 "content": [
-                    {"type": "text",
-                     "text": f"Extract invoice data in JSON format using this schema: {json.dumps(invoice_schema)}"},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
+                    {
+                        "type": "text",
+                        "text": f"Extract invoice data in JSON format using this schema: {json.dumps(invoice_schema)}"
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}
+                    }
                 ]
             }],
             max_tokens=1000
         )
-        json_data = json.loads(response.choices[0].message.content)
+
+        content = response.choices[0].message.content
+        logger.info("AI raw response: %s", content)
+
+        json_data = json.loads(content) if isinstance(content, str) else content
+
     except Exception as error:
-        logger.error(f"AI processing failed: {error}")
+        logger.exception("AI processing failed")
         messages.warning(request, 'AI processing failed.')
         return redirect('tally:vendor_bill_list', team_slug=team_slug)
 
-    # Save extracted data to the bill object
+    # Parse and save extracted data
     try:
-        relevant_data = json_data if "properties" not in json_data else {
-            "invoiceNumber": json_data["properties"]["invoiceNumber"]["const"],
-            "dateIssued": json_data["properties"]["dateIssued"]["const"],
-            "dueDate": json_data["properties"]["dueDate"]["const"],
-            "from": json_data["properties"]["from"]["properties"],
-            "to": json_data["properties"]["to"]["properties"],
-            "items": [
-                {
-                    "description": item["description"]["const"],
-                    "quantity": item["quantity"]["const"],
-                    "price": item["price"]["const"]
-                } for item in json_data["properties"]["items"]["items"]
-            ],
-            "total": json_data["properties"]["total"]["const"],
-            "igst": json_data["properties"]["igst"]["const"],
-            "cgst": json_data["properties"]["cgst"]["const"],
-            "sgst": json_data["properties"]["sgst"]["const"],
-        }
+        if "properties" in json_data:
+            props = json_data["properties"]
+            relevant_data = {
+                "invoiceNumber": props.get("invoiceNumber", {}).get("const", ""),
+                "dateIssued": props.get("dateIssued", {}).get("const", ""),
+                "dueDate": props.get("dueDate", {}).get("const", ""),
+                "from": props.get("from", {}).get("properties", {}),
+                "to": props.get("to", {}).get("properties", {}),
+                "items": [
+                    {
+                        "description": item.get("description", {}).get("const", ""),
+                        "quantity": item.get("quantity", {}).get("const", 0),
+                        "price": item.get("price", {}).get("const", 0)
+                    } for item in props.get("items", {}).get("items", [])
+                ],
+                "total": props.get("total", {}).get("const", 0),
+                "igst": props.get("igst", {}).get("const", 0),
+                "cgst": props.get("cgst", {}).get("const", 0),
+                "sgst": props.get("sgst", {}).get("const", 0)
+            }
+        else:
+            relevant_data = json_data
 
+        logger.info("Parsed relevant data: %s", json.dumps(relevant_data, indent=2))
         bill.analysed_data = relevant_data
         bill.save(update_fields=['analysed_data'])
+
     except Exception as error:
-        logger.error(f"Error saving bill data: {error}")
+        logger.exception("Error saving extracted data to bill")
         messages.warning(request, 'Error saving Bill data.')
         return redirect('tally:expense_bill_list', team_slug=team_slug)
 
-    # Extract required fields safely
+    # Create analyzed bill and product records
     try:
         invoice_number = relevant_data.get('invoiceNumber', '').strip()
         date_issued = relevant_data.get('dateIssued', '')
         date_issued = datetime.strptime(date_issued, '%Y-%m-%d').date() if date_issued else None
 
-        # Create ExpenseAnalyzedBill entry
         analyzed_bill = TallyExpenseAnalyzedBill.objects.create(
             selectBill=bill,
             voucher=invoice_number,
@@ -286,7 +306,6 @@ def expense_bill_analysis_process(request, team_slug, bill_id):
             team=request.team
         )
 
-        # Bulk create ExpenseAnalyzedProduct entries
         product_instances = []
         for item in relevant_data.get('items', []):
             price = float(item.get('price', 0) or 0)
@@ -297,26 +316,26 @@ def expense_bill_analysis_process(request, team_slug, bill_id):
                 TallyExpenseAnalyzedProduct(
                     expense_bill=analyzed_bill,
                     item_details=item.get('description', ''),
-                    amount=str(amount),  # Convert to string
+                    amount=str(amount),
                     team=request.team
                 )
             )
 
         TallyExpenseAnalyzedProduct.objects.bulk_create(product_instances)
 
-        # Update bill status
         bill.status = "Analyzed"
         bill.process = True
         bill.save(update_fields=['status', 'process'])
 
+        logger.info("Successfully processed and saved AI analyzed bill for bill_id=%s", bill_id)
         messages.success(request, 'Bill analyzed and processed successfully!')
 
     except (KeyError, ValueError) as e:
-        logger.error(f"Data parsing error: {e}")
-        messages.warning(request, f'Missing expected data: {e}')
+        logger.exception("Data parsing error during analyzed bill creation")
+        messages.warning(request, f'Missing or malformed data: {e}')
         return redirect('tally:expense_bill_list', team_slug=team_slug)
     except Exception as e:
-        logger.error(f"Unexpected error: {e}")
+        logger.exception("Unexpected error during analyzed bill creation")
         messages.warning(request, f'An error occurred: {e}')
         return redirect('tally:expense_bill_list', team_slug=team_slug)
 
