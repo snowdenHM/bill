@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
 from django.db import transaction
+from django.utils.timezone import localtime
 from apps.teams.models import Team
 from apps.bills.tally.api.serializers import LedgerSerializer, InvoiceIDSerializer
 # Project Imports
@@ -93,11 +94,7 @@ class TallyExpenseApi(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request, team_slug, *args, **kwargs):
-        """
-        Retrieve all synced expense bills grouped by voucher.
-        """
         try:
-            # Get all 'Synced' analyzed bills for the team
             expenses = TallyExpenseAnalyzedBill.objects.filter(
                 selectBill__status='Synced',
                 selectBill__team__slug=team_slug
@@ -109,18 +106,12 @@ class TallyExpenseApi(APIView):
                 "bill_no": None,
                 "bill_date": None,
                 "total": 0.0,
-                "vendor": {
-                    "name": "",
-                    "company": "",
-                    "gst_in": ""
-                },
-                "taxes": {
-                    "igst": {"amount": 0.0, "ledger": ""},
-                    "cgst": {"amount": 0.0, "ledger": ""},
-                    "sgst": {"amount": 0.0, "ledger": ""}
-                },
+                "name": "",
+                "company": "",
+                "gst_in": "",
+                "DR_LEDGER": defaultdict(float),
+                "CR_LEDGER": defaultdict(float),
                 "note": "",
-                "products": [],
                 "created_at": None
             })
 
@@ -128,7 +119,6 @@ class TallyExpenseApi(APIView):
                 voucher = expense.voucher or "N/A"
                 group = grouped[voucher]
 
-                # Only set once (for the first time the voucher is seen)
                 if not group["id"]:
                     group.update({
                         "id": expense.id,
@@ -136,38 +126,26 @@ class TallyExpenseApi(APIView):
                         "bill_no": expense.bill_no or "N/A",
                         "bill_date": expense.bill_date.strftime('%Y-%m-%d') if expense.bill_date else None,
                         "total": float(expense.total) if expense.total else 0.0,
-                        "vendor": {
-                            "name": expense.vendor.name if expense.vendor else "No Vendor",
-                            "company": expense.vendor.company if expense.vendor else "No Company",
-                            "gst_in": expense.vendor.gst_in if expense.vendor else "No GST",
-                        },
-                        "taxes": {
-                            "igst": {
-                                "amount": float(expense.igst) if expense.igst else 0.0,
-                                "ledger": str(expense.igst_taxes) if expense.igst_taxes else "No Tax Ledger",
-                            },
-                            "cgst": {
-                                "amount": float(expense.cgst) if expense.cgst else 0.0,
-                                "ledger": str(expense.cgst_taxes) if expense.cgst_taxes else "No Tax Ledger",
-                            },
-                            "sgst": {
-                                "amount": float(expense.sgst) if expense.sgst else 0.0,
-                                "ledger": str(expense.sgst_taxes) if expense.sgst_taxes else "No Tax Ledger",
-                            }
-                        },
+                        "name": expense.vendor.name if expense.vendor else "No Vendor",
+                        "company": expense.vendor.company if expense.vendor else "No Company",
+                        "gst_in": expense.vendor.gst_in if expense.vendor else "No GST",
                         "note": expense.note or "No Notes",
-                        "created_at": expense.created_at.strftime('%Y-%m-%d %H:%M:%S') if expense.created_at else None,
+                        "created_at": localtime(expense.created_at).strftime('%Y-%m-%d %H:%M:%S') if expense.created_at else None
                     })
 
-                # Append all products
                 for product in expense.products.all():
-                    group["products"].append({
-                        "id": product.id,
-                        "chart_of_accounts": str(
-                            product.chart_of_accounts.name) if product.chart_of_accounts else "No Chart",
-                        "amount": float(product.amount) if product.amount else 0.0,
-                        "debit_or_credit": product.debit_or_credit or "credit",
-                    })
+                    ledger_name = str(product.chart_of_accounts.name) if product.chart_of_accounts else "Unknown Ledger"
+                    amount = float(product.amount or 0.0)
+
+                    if product.debit_or_credit == 'debit':
+                        group["DR_LEDGER"][f"{ledger_name} DR"] += amount
+                    else:
+                        group["CR_LEDGER"][f"{ledger_name} CR"] += amount
+
+            # Convert nested defaultdicts to dicts for serialization
+            for group in grouped.values():
+                group["DR_LEDGER"] = dict(group["DR_LEDGER"])
+                group["CR_LEDGER"] = dict(group["CR_LEDGER"])
 
             return Response({"data": list(grouped.values())}, status=status.HTTP_200_OK)
 
