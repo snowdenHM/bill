@@ -109,8 +109,8 @@ class TallyExpenseApi(APIView):
                 "name": "",
                 "company": "",
                 "gst_in": "",
-                "DR_LEDGER": defaultdict(float),
-                "CR_LEDGER": defaultdict(float),
+                "DR_LEDGER": [],
+                "CR_LEDGER": [],
                 "note": "",
                 "created_at": None
             })
@@ -136,16 +136,12 @@ class TallyExpenseApi(APIView):
                 for product in expense.products.all():
                     ledger_name = str(product.chart_of_accounts.name) if product.chart_of_accounts else "Unknown Ledger"
                     amount = float(product.amount or 0.0)
+                    ledger_entry = {"LEDGERNAME": ledger_name, "AMOUNT": amount}
 
                     if product.debit_or_credit == 'debit':
-                        group["DR_LEDGER"][f"{ledger_name} DR"] += amount
+                        group["DR_LEDGER"].append(ledger_entry)
                     else:
-                        group["CR_LEDGER"][f"{ledger_name} CR"] += amount
-
-            # Convert nested defaultdicts to dicts for serialization
-            for group in grouped.values():
-                group["DR_LEDGER"] = dict(group["DR_LEDGER"])
-                group["CR_LEDGER"] = dict(group["CR_LEDGER"])
+                        group["CR_LEDGER"].append(ledger_entry)
 
             return Response({"data": list(grouped.values())}, status=status.HTTP_200_OK)
 
