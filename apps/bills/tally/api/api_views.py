@@ -1,4 +1,5 @@
 import re
+import os
 from rest_framework import status
 from rest_framework import viewsets
 from collections import defaultdict
@@ -82,9 +83,24 @@ class LedgerViewSet(viewsets.ModelViewSet):
 class MasterAPIView(APIView):
     permission_classes = [AllowAny]
 
-    def post(self, request,team_slug, *args, **kwargs):
-        print("Incoming Data:", request.data)
-        return Response({'message': 'Incoming Data Received'}, status=status.HTTP_200_OK)
+    def post(self, request, team_slug, *args, **kwargs):
+        # Get raw request body
+        raw_data = request.body.decode('utf-8')
+
+        # Optional: Add timestamp to the filename
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"incoming_data_{timestamp}.txt"
+
+        # Save to file
+        save_dir = "incoming_logs"
+        os.makedirs(save_dir, exist_ok=True)
+        filepath = os.path.join(save_dir, filename)
+
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(raw_data)
+
+        print(f"Incoming data saved to {filepath}")
+        return Response({'message': 'Incoming data received and saved.'}, status=status.HTTP_200_OK)
 
 
 class TallyExpenseApi(APIView):
