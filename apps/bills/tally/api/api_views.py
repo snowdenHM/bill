@@ -82,7 +82,7 @@ class LedgerViewSet(viewsets.ModelViewSet):
 class MasterAPIView(APIView):
     permission_classes = [AllowAny]
 
-    def post(self, request):
+    def post(self, request,team_slug, *args, **kwargs):
         print("Incoming Data:", request.data)
         return Response({'message': 'Incoming Data Received'}, status=status.HTTP_200_OK)
 
